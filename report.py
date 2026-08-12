@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 SLOT = os.environ.get("SLOT", "now")
-SLOT_LABELS = {"trua": "Trưa (12h)", "chieu": "Chiều (17h)", "toi": "Tối (cuối ngày)", "now": "Cập nhật"}
-SLOT_CUTOFFS = {"trua": "12:00:00", "chieu": "17:00:00", "toi": "23:59:59", "now": "23:59:59"}
+SLOT_LABELS = {"trua": "Trưa (12h)", "chieu": "Chiều (15h)", "toi": "Tối (22h)", "now": "Cập nhật"}
+SLOT_CUTOFFS = {"trua": "12:00:00", "chieu": "15:00:00", "toi": "22:00:00", "now": "23:59:59"}
 
 CUKCUK_BASE = "https://graphapi.cukcuk.vn"
 BRANDS_CUKCUK = {
