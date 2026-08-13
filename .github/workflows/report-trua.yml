@@ -1,0 +1,23 @@
+name: Revenue Report - Trua (12h VN)
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 12:00 giờ Việt Nam
+  workflow_dispatch:
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Gửi báo cáo
+        env:
+          SLOT: trua
+          CUKCUK_BPP_SECRET: ${{ secrets.CUKCUK_BPP_SECRET }}
+          CUKCUK_WAJI_SECRET: ${{ secrets.CUKCUK_WAJI_SECRET }}
+          CUKCUK_39BEEF_SECRET: ${{ secrets.CUKCUK_39BEEF_SECRET }}
+          LARK_APP_ID: ${{ secrets.LARK_APP_ID }}
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          LARK_CHAT_ID: ${{ secrets.LARK_CHAT_ID }}
+        run: python3 report.py
