@@ -11,7 +11,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 SLOT = os.environ.get("SLOT", "now")
@@ -126,8 +126,17 @@ def fmt_k(v):
 
 
 def main():
-    today = datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")
-    now_hm = datetime.now(ZoneInfo("Asia/Saigon")).strftime("%H:%M")
+    now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
+    now_hm = now_vn.strftime("%H:%M")
+
+    # GitHub Actions cron có thể trễ nhiều giờ (đã thấy trễ >3 tiếng). Nếu 1 lần chạy
+    # theo lịch (không phải lệnh "now") bị trễ qua nửa đêm, coi như vẫn thuộc về ngày
+    # hôm trước — tránh báo nhầm 0đ cho ngày mới vừa bắt đầu vài phút.
+    if SLOT != "now" and now_vn.hour < 6:
+        today = (now_vn - timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        today = now_vn.strftime("%Y-%m-%d")
+
     cutoff = SLOT_CUTOFFS[SLOT]
     header = f"Cập nhật lúc {now_hm}" if SLOT == "now" else SLOT_LABELS[SLOT]
     print("Ngày tính (Asia/Saigon):", today, "cutoff:", cutoff)
