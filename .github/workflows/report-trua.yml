@@ -1,8 +1,10 @@
 name: Revenue Report - Trua (12h VN)
 
 on:
-  schedule:
-    - cron: '0 5 * * *'   # 12:00 giờ Việt Nam
+  # Lịch tự động ĐÃ TẮT — launchd local là kênh chính (chạy đúng giờ hơn nhiều).
+  # Bật lại bằng cách bỏ comment 2 dòng dưới nếu cần dùng làm dự phòng.
+  # schedule:
+  #   - cron: '0 5 * * *'   # 12:00 giờ Việt Nam
   workflow_dispatch:
 
 jobs:
