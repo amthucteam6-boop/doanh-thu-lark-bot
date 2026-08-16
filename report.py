@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,20 +38,32 @@ LARK_CHAT_ID = os.environ["LARK_CHAT_ID"]
 LARK_BASE = "https://open.larksuite.com"
 
 
-def http_json(method, url, payload=None, headers=None, params=None):
+def http_json(method, url, payload=None, headers=None, params=None, timeout=30, retries=3):
+    """
+    CukCuk thỉnh thoảng timeout tạm thời khi 1 brand có nhiều hoá đơn/trang
+    (vd BPP ~500-600 bill/ngày, nhiều trang hơn hẳn Waji/39Beef) — thử lại vài
+    lần trước khi báo lỗi hẳn, thay vì mất cả brand chỉ vì 1 request bị chậm.
+    """
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Content-Type", "application/json")
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {e.code} for {url}: {body}") from None
+    last_exc = None
+    for attempt in range(retries):
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Content-Type", "application/json")
+        for k, v in (headers or {}).items():
+            req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {e.code} for {url}: {body}") from None
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last_exc = exc
+            if attempt < retries - 1:
+                time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"Timeout/network error for {url} sau {retries} lần thử: {last_exc}")
 
 
 def cukcuk_login(cfg):
@@ -154,7 +167,7 @@ def main():
                 print(f"LỖI lấy dữ liệu {cukcuk_key}: {exc}")
 
         if cukcuk_key in cukcuk_errors:
-            failed.append(label)
+            failed.append((label, cukcuk_errors[cukcuk_key]))
             continue
 
         by_branch = cukcuk_cache[cukcuk_key]
@@ -176,8 +189,15 @@ def main():
         + "\n".join(lines)
         + f"\n\n**Tổng cộng: {fmt_money(grand_rev)}** ({grand_bills} bill · AOV {fmt_k(grand_aov)})"
     )
-    if failed:
-        message += f"\n\n⚠️ Không lấy được dữ liệu: {', '.join(failed)} (CukCuk báo lỗi, cần kiểm tra lại credentials)"
+    for label, error in failed:
+        text = (error or "").lower()
+        if "timed out" in text or "timeout" in text:
+            reason = "CukCuk phản hồi chậm/timeout — số liệu sẽ tự bù lại ở lần cập nhật kế tiếp"
+        elif "login failed" in text or "signature" in text or "401" in text:
+            reason = "CukCuk từ chối đăng nhập — cần kiểm tra lại credentials"
+        else:
+            reason = "CukCuk báo lỗi, cần kiểm tra lại"
+        message += f"\n\n⚠️ Không lấy được dữ liệu {label}: {reason}"
     print(message)
 
     tok = http_json("POST", f"{LARK_BASE}/open-apis/auth/v3/tenant_access_token/internal",
