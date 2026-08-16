@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/lark-webhook.py": {
+      "maxDuration": 60
+    }
+  }
+}
