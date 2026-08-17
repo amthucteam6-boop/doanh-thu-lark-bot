@@ -228,19 +228,42 @@ def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None):
 
     def _fetch_branch(b):
         name = b["Name"].strip()
+        by_channel = {}
         rev, bills = 0.0, 0
         for inv in fetch_invoices_since(b["Id"], since_date_iso, headers):
-            if classify_online_channel(inv.get("TableName") or "") is None:
+            ch = classify_online_channel(inv.get("TableName") or "")
+            if ch is None:
                 continue
-            rev += float(inv.get("TotalAmount") or 0)
+            amt = float(inv.get("TotalAmount") or 0)
+            slot = by_channel.setdefault(ch, {"revenue": 0.0, "bills": 0})
+            slot["revenue"] += amt
+            slot["bills"] += 1
+            rev += amt
             bills += 1
-        return name, {"revenue": rev, "bills": bills}
+        return name, {"revenue": rev, "bills": bills, "by_channel": by_channel}
 
     by_branch = {}
     with ThreadPoolExecutor(max_workers=min(len(branches), 10) or 1) as ex:
         for name, data in ex.map(_fetch_branch, branches):
             by_branch[name] = data
     return by_branch
+
+
+def _merge_channels(by_branch):
+    merged = {}
+    for data in by_branch.values():
+        for ch, v in data["by_channel"].items():
+            slot = merged.setdefault(ch, {"revenue": 0.0, "bills": 0})
+            slot["revenue"] += v["revenue"]
+            slot["bills"] += v["bills"]
+    return merged
+
+
+def _channel_summary(by_channel):
+    if not by_channel:
+        return None
+    parts = [f"{name} {fmt_k(v['revenue'])}" for name, v in sorted(by_channel.items(), key=lambda x: -x[1]["revenue"])]
+    return ", ".join(parts)
 
 
 def build_online_answer(text):
@@ -268,12 +291,18 @@ def build_online_answer(text):
         if split_branches:
             for name, data in sorted(by_branch.items(), key=lambda x: -x[1]["revenue"]):
                 lines.append(f"**{name}**: {fmt_money(data['revenue'])} — {data['bills']} bill")
+                summary = _channel_summary(data["by_channel"])
+                if summary:
+                    lines.append(f"　↳ {summary}")
                 grand_total += data["revenue"]
                 grand_bills += data["bills"]
         else:
             total_rev = sum(v["revenue"] for v in by_branch.values())
             total_bills = sum(v["bills"] for v in by_branch.values())
             lines.append(f"**{label}**: {fmt_money(total_rev)} — {total_bills} bill")
+            summary = _channel_summary(_merge_channels(by_branch))
+            if summary:
+                lines.append(f"　↳ {summary}")
             grand_total += total_rev
             grand_bills += total_bills
 
