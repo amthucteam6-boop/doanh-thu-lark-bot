@@ -117,7 +117,14 @@ def fetch_invoices_since(branch_id, since_date_iso, headers):
 
 def fetch_brand_range(cukcuk_key, since_date_iso):
     cfg = BRANDS_CUKCUK[cukcuk_key]
-    token = cukcuk_login(cfg)
+    # CukCuk thinh thoang tu choi tam thoi khi nhieu brand dang nhap gan nhau
+    # (loi ung dung Code:200 kem ErrorType, khong phai loi mang nen retry o
+    # http_json khong bat duoc) - thu lai 1 lan sau 2s truoc khi bao loi han.
+    try:
+        token = cukcuk_login(cfg)
+    except RuntimeError:
+        time.sleep(2)
+        token = cukcuk_login(cfg)
     headers = cukcuk_headers(token)
     branches = get_branches(headers)
     by_id = {b["Id"]: b["Name"] for b in branches}
