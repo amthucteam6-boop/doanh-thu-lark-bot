@@ -13,10 +13,12 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from zoneinfo import ZoneInfo
@@ -173,6 +175,121 @@ def detect_period(text):
     return "today"
 
 
+def detect_report_type(text):
+    t = text.lower()
+    if "merchant" in t or "online" in t:
+        return "online"
+    return "revenue"
+
+
+# --- Doanh thu kenh Merchant/Online (Grab/Foody/Shopee/Befood/...) ---
+#
+# CukCuk gan ten kenh online vao TableName cua hoa don (vd "Grab1", "Foody1").
+# O BPP ban vat ly luon de trong nen "TableName khong rong" = online. Nhung o
+# Waji/39Beef (phuc vu tai ban that), TableName thuong la SO BAN THAT - phai
+# nhan dien theo dung ten kenh da biet, khong the dung "khong rong = online".
+ONLINE_CHANNEL_PREFIXES = [
+    "grabfood", "grab", "shopeefood", "shopee", "foody", "befood",
+    "capichi", "dealtoday", "xanh ngon", "kh doanh nghiep", "kh su kien",
+]
+
+# 10 co so BPP dang hoat dong that (xac nhan 17/08/2026 - 6 chi nhanh CukCuk
+# tra ve nhung 0 hoat dong nhieu ngay lien, gom 2 cai da ghi "(closed)"). Can
+# ra soat lai neu BPP mo/dong them co so moi.
+BPP_ACTIVE_BRANCHES = [
+    "Nguyễn Du", "Lê Đại Hành", "Phan Đình Phùng", "34 Vũ Phạm Hàm",
+    "Thái Hà", "Hàng Bông", "Nguyễn Lương Bằng", "Lương Định Của",
+    "177 Đội Cấn", "Nguyễn Thị Định",
+]
+
+
+def classify_online_channel(table_name):
+    stripped = re.sub(r"\s*\d+$", "", table_name or "").strip()
+    if not stripped:
+        return None
+    normalized = stripped.lower()
+    for prefix in ONLINE_CHANNEL_PREFIXES:
+        if normalized.startswith(prefix):
+            return stripped
+    return None
+
+
+def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None):
+    cfg = BRANDS_CUKCUK[cukcuk_key]
+    try:
+        token = cukcuk_login(cfg)
+    except RuntimeError:
+        time.sleep(2)
+        token = cukcuk_login(cfg)
+    headers = cukcuk_headers(token)
+    branches = get_branches(headers)
+    if branch_filter:
+        branches = [b for b in branches if any(f in b["Name"] for f in branch_filter)]
+
+    def _fetch_branch(b):
+        name = b["Name"].strip()
+        rev, bills = 0.0, 0
+        for inv in fetch_invoices_since(b["Id"], since_date_iso, headers):
+            if classify_online_channel(inv.get("TableName") or "") is None:
+                continue
+            rev += float(inv.get("TotalAmount") or 0)
+            bills += 1
+        return name, {"revenue": rev, "bills": bills}
+
+    by_branch = {}
+    with ThreadPoolExecutor(max_workers=min(len(branches), 10) or 1) as ex:
+        for name, data in ex.map(_fetch_branch, branches):
+            by_branch[name] = data
+    return by_branch
+
+
+def build_online_answer(text):
+    period = detect_period(text)
+    brand_filter = detect_brand(text)
+    now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
+
+    if period == "month":
+        since_date = now_vn.strftime("%Y-%m-01")
+        header = f"Doanh thu kênh Merchant/Online — tháng {now_vn.month}/{now_vn.year} (tính đến {now_vn.strftime('%d/%m %H:%M')})"
+    else:
+        since_date = now_vn.strftime("%Y-%m-%d")
+        header = f"Doanh thu kênh Merchant/Online — hôm nay {now_vn.strftime('%d/%m/%Y')} (tính đến {now_vn.strftime('%H:%M')})"
+
+    lines = []
+    grand_total, grand_bills = 0.0, 0
+
+    def add_brand(cukcuk_key, label, branch_filter_names, split_branches):
+        nonlocal grand_total, grand_bills
+        try:
+            by_branch = fetch_online_revenue(cukcuk_key, since_date, branch_filter_names)
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"⚠️ {label}: lỗi lấy dữ liệu ({str(exc)[:80]})")
+            return
+        if split_branches:
+            for name, data in sorted(by_branch.items(), key=lambda x: -x[1]["revenue"]):
+                lines.append(f"**{name}**: {fmt_money(data['revenue'])} — {data['bills']} bill")
+                grand_total += data["revenue"]
+                grand_bills += data["bills"]
+        else:
+            total_rev = sum(v["revenue"] for v in by_branch.values())
+            total_bills = sum(v["bills"] for v in by_branch.values())
+            lines.append(f"**{label}**: {fmt_money(total_rev)} — {total_bills} bill")
+            grand_total += total_rev
+            grand_bills += total_bills
+
+    if brand_filter in (None, "bpp"):
+        add_brand("bpp", "Beard Papa's (BPP) - 10 cơ sở", BPP_ACTIVE_BRANCHES, split_branches=False)
+    if brand_filter in (None, "waji"):
+        add_brand("waji", "Waji", None, split_branches=False)
+    if brand_filter in (None, "39beef"):
+        add_brand("39beef", "39Beef", None, split_branches=True)
+
+    message = f"**📊 {header}**\n\n" + "\n".join(lines)
+    if brand_filter is None:
+        message += f"\n\n**Tổng cộng: {fmt_money(grand_total)}** ({grand_bills} bill)"
+    return message
+
+
 def build_answer(text):
     period = detect_period(text)
     brand_filter = detect_brand(text)
@@ -303,7 +420,7 @@ class handler(BaseHTTPRequestHandler):
         chat_id = message.get("chat_id")
         message_id = message.get("message_id")
         try:
-            answer = build_answer(text)
+            answer = build_online_answer(text) if detect_report_type(text) == "online" else build_answer(text)
         except Exception as exc:  # noqa: BLE001
             answer = f"⚠️ Có lỗi khi lấy doanh thu: {exc}"
 
