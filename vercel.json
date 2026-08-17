@@ -2,6 +2,14 @@
   "functions": {
     "api/lark-webhook.py": {
       "maxDuration": 60
+    },
+    "api/scheduled-report.py": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/scheduled-report?slot=trua", "schedule": "0 5 * * *" },
+    { "path": "/api/scheduled-report?slot=chieu", "schedule": "0 8 * * *" },
+    { "path": "/api/scheduled-report?slot=toi", "schedule": "0 15 * * *" }
+  ]
 }
