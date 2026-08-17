@@ -234,7 +234,7 @@ def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None):
             ch = classify_online_channel(inv.get("TableName") or "")
             if ch is None:
                 continue
-            amt = float(inv.get("TotalAmount") or 0)
+            amt = float(inv.get("TotalAmount") or inv.get("Amount") or 0)
             slot = by_channel.setdefault(ch, {"revenue": 0.0, "bills": 0})
             slot["revenue"] += amt
             slot["bills"] += 1
