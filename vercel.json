@@ -3,13 +3,19 @@
     "api/lark-webhook.py": {
       "maxDuration": 60
     },
-    "api/scheduled-report.py": {
+    "api/scheduled-report-trua.py": {
+      "maxDuration": 60
+    },
+    "api/scheduled-report-chieu.py": {
+      "maxDuration": 60
+    },
+    "api/scheduled-report-toi.py": {
       "maxDuration": 60
     }
   },
   "crons": [
-    { "path": "/api/scheduled-report?slot=trua", "schedule": "0 5 * * *" },
-    { "path": "/api/scheduled-report?slot=chieu", "schedule": "0 8 * * *" },
-    { "path": "/api/scheduled-report?slot=toi", "schedule": "0 15 * * *" }
+    { "path": "/api/scheduled-report-trua", "schedule": "0 5 * * *" },
+    { "path": "/api/scheduled-report-chieu", "schedule": "0 8 * * *" },
+    { "path": "/api/scheduled-report-toi", "schedule": "0 15 * * *" }
   ]
 }
