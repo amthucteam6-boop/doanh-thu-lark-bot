@@ -223,6 +223,8 @@ def build_scheduled_message(slot, date_iso):
         for key, result, exc in ex.map(_job, jobs):
             raw[key] = (result, exc)
 
+    UNIT_ICON = {"bpp": "🥐", "waji": "🍚", "39beef": "🥩"}
+
     lines = []
     grand_rev, grand_bills, grand_online = 0.0, 0, 0.0
 
@@ -230,7 +232,8 @@ def build_scheduled_message(slot, date_iso):
         nonlocal grand_rev, grand_bills, grand_online
         result, exc = raw[cukcuk_key]
         if exc is not None:
-            lines.append(f"⚠️ {unit_label}: lỗi lấy dữ liệu ({str(exc)[:80]})")
+            lines.append(f"⚠️ **{unit_label}**: lỗi lấy dữ liệu ({str(exc)[:80]})")
+            lines.append("")
             return
         by_branch, by_branch_online = result
         if match_substr:
@@ -246,10 +249,16 @@ def build_scheduled_message(slot, date_iso):
             online_by_channel = _merge_channels(by_branch_online)
 
         aov = round(rev / bills) if bills else 0
-        lines.append(f"**{unit_label}**: {fmt_money(rev)} — {bills} bill — AOV {fmt_k(aov)}")
+        icon = UNIT_ICON.get(cukcuk_key, "🔸")
+        lines.append(f"{icon} **{unit_label}**: {fmt_money(rev)} · {bills} bill · AOV {fmt_k(aov)}")
+        # Luon hien dong Online (ke ca 0d) - an di khi = 0 khien Anh tuong nham la
+        # bo sot/quen tinh, trong khi thuc ra chi la chua co don online luc do.
         summary = _channel_summary(online_by_channel)
+        online_line = f"　↳ Online {fmt_money(online_rev)}"
         if summary:
-            lines.append(f"　↳ Merchant/Online {fmt_money(online_rev)}: {summary}")
+            online_line += f" ({summary})"
+        lines.append(online_line)
+        lines.append("")
         grand_rev += rev
         grand_bills += bills
         grand_online += online_rev
@@ -260,9 +269,10 @@ def build_scheduled_message(slot, date_iso):
     emit("39Beef - 34 Vũ Phạm Hàm", "39beef", "34")
 
     grand_aov = round(grand_rev / grand_bills) if grand_bills else 0
-    message = f"**📊 Doanh thu 3 Brand — {label} — {date_iso}**\n\n" + "\n".join(lines)
-    message += f"\n\n**Tổng cộng: {fmt_money(grand_rev)}** ({grand_bills} bill · AOV {fmt_k(grand_aov)})"
-    message += f"\n**Tổng Merchant/Online: {fmt_money(grand_online)}**"
+    body = "\n".join(lines).rstrip()
+    message = f"**📊 Doanh thu 3 Brand — {label} — {date_iso}**\n\n{body}"
+    message += f"\n\n━━━━━━━━━━━━━━━\n**Tổng cộng: {fmt_money(grand_rev)}** · {grand_bills} bill · AOV {fmt_k(grand_aov)}"
+    message += f"\n**Merchant/Online: {fmt_money(grand_online)}**"
     return message
 
 
