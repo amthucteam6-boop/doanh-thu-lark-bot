@@ -278,31 +278,36 @@ def build_online_answer(text):
         since_date = now_vn.strftime("%Y-%m-%d")
         header = f"Doanh thu kênh Merchant/Online — hôm nay {now_vn.strftime('%d/%m/%Y')} (tính đến {now_vn.strftime('%H:%M')})"
 
+    UNIT_ICON = {"bpp": "🥐", "waji": "🍚", "39beef": "🥩"}
     lines = []
     grand_total, grand_bills = 0.0, 0
 
     def add_brand(cukcuk_key, label, branch_filter_names, split_branches):
         nonlocal grand_total, grand_bills
+        icon = UNIT_ICON.get(cukcuk_key, "🔸")
         try:
             by_branch = fetch_online_revenue(cukcuk_key, since_date, branch_filter_names)
         except Exception as exc:  # noqa: BLE001
-            lines.append(f"⚠️ {label}: lỗi lấy dữ liệu ({str(exc)[:80]})")
+            lines.append(f"⚠️ **{label}**: lỗi lấy dữ liệu ({str(exc)[:80]})")
+            lines.append("")
             return
         if split_branches:
             for name, data in sorted(by_branch.items(), key=lambda x: -x[1]["revenue"]):
-                lines.append(f"**{name}**: {fmt_money(data['revenue'])} — {data['bills']} bill")
+                lines.append(f"{icon} **{name}**: {fmt_money(data['revenue'])} · {data['bills']} bill")
                 summary = _channel_summary(data["by_channel"])
                 if summary:
                     lines.append(f"　↳ {summary}")
+                lines.append("")
                 grand_total += data["revenue"]
                 grand_bills += data["bills"]
         else:
             total_rev = sum(v["revenue"] for v in by_branch.values())
             total_bills = sum(v["bills"] for v in by_branch.values())
-            lines.append(f"**{label}**: {fmt_money(total_rev)} — {total_bills} bill")
+            lines.append(f"{icon} **{label}**: {fmt_money(total_rev)} · {total_bills} bill")
             summary = _channel_summary(_merge_channels(by_branch))
             if summary:
                 lines.append(f"　↳ {summary}")
+            lines.append("")
             grand_total += total_rev
             grand_bills += total_bills
 
@@ -313,9 +318,10 @@ def build_online_answer(text):
     if brand_filter in (None, "39beef"):
         add_brand("39beef", "39Beef", None, split_branches=True)
 
-    message = f"**📊 {header}**\n\n" + "\n".join(lines)
+    body = "\n".join(lines).rstrip()
+    message = f"**📊 {header}**\n\n{body}"
     if brand_filter is None:
-        message += f"\n\n**Tổng cộng: {fmt_money(grand_total)}** ({grand_bills} bill)"
+        message += f"\n\n━━━━━━━━━━━━━━━\n**Tổng cộng: {fmt_money(grand_total)}** · {grand_bills} bill"
     return message
 
 
