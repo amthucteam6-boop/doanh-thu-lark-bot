@@ -9,10 +9,13 @@ chay tren cloud 24/7, KHONG phu thuoc may Mac bat/tat.
 Bao ve bang CRON_SECRET (Vercel tu dong gui header Authorization: Bearer
 <CRON_SECRET> cho request tu chinh Cron Job cua no).
 
-QUAN TRONG: tinh doanh thu theo MOC GIO CO DINH, KHONG phai "gio hien tai luc
-cron chay" - vi Vercel co the bi delay vai phut, neu tinh theo gio thuc te se
-ra so sai (bai hoc tu su co GitHub Actions truoc day). Neu bi delay qua nua
-dem thi van tinh cho ngay hom truoc.
+QUAN TRONG: tinh doanh thu luy ke toi GIO THUC TE luc gui (khong phai moc co
+dinh 12:00/15:00/22:00 nua) - doi lai ngay 2026-08-18 vi don hang phat sinh
+vai phut ngay sau moc co dinh (vd 22:04) bi loai khoi bao cao "Toi" trong khi
+thuc te da xay ra truoc luc tin nhan gui, gay hieu lam la thieu du lieu. Nhan
+"Trua/Chieu/Toi" gio chi con la TEN goi cua tung lan chay trong ngay, khong
+con la cam ket "dung so tai chinh xac mot moc". Van giu safeguard: neu bi
+delay qua nua dem thi tinh cho ngay hom truoc.
 """
 
 import hashlib
@@ -205,8 +208,10 @@ def fmt_k(v):
     return f"{round(v / 1000):,.0f}".replace(",", ".") + "k"
 
 
-def build_scheduled_message(slot, date_iso):
-    cutoff = SLOT_CUTOFFS[slot]
+def build_scheduled_message(slot, date_iso, cutoff):
+    # cutoff = gio THUC TE luc gui (khong dung moc co dinh SLOT_CUTOFFS nua) -
+    # tranh don hang phat sinh vai phut sau moc danh nghia (vd 22:04) bi loai
+    # khoi bao cao "Toi", trong khi thuc te da xay ra truoc luc tin nhan gui.
     label = SLOT_LABELS[slot]
 
     jobs = [("bpp", BPP_ACTIVE_BRANCHES), ("waji", None), ("39beef", None)]
@@ -313,7 +318,7 @@ class handler(BaseHTTPRequestHandler):
         date_iso = (now_vn - timedelta(days=1)).strftime("%Y-%m-%d") if now_vn.hour < 6 else now_vn.strftime("%Y-%m-%d")
 
         try:
-            message = build_scheduled_message(slot, date_iso)
+            message = build_scheduled_message(slot, date_iso, now_vn.strftime("%H:%M:%S"))
             send_to_lark(message)
             self._respond(200, {"ok": True, "slot": slot, "date": date_iso})
         except Exception as exc:  # noqa: BLE001
