@@ -59,7 +59,7 @@ ONLINE_CHANNEL_PREFIXES = [
 BPP_ACTIVE_BRANCHES = [
     "Nguyễn Du", "Lê Đại Hành", "Phan Đình Phùng", "34 Vũ Phạm Hàm",
     "Thái Hà", "Hàng Bông", "Nguyễn Lương Bằng", "Lương Định Của",
-    "177 Đội Cấn", "Nguyễn Thị Định",
+    "177 Đội Cấn", "Nguyễn Thị Định", "Hội Chợ",
 ]
 
 
