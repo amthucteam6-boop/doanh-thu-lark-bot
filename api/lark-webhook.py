@@ -199,7 +199,7 @@ ONLINE_CHANNEL_PREFIXES = [
 BPP_ACTIVE_BRANCHES = [
     "Nguyễn Du", "Lê Đại Hành", "Phan Đình Phùng", "34 Vũ Phạm Hàm",
     "Thái Hà", "Hàng Bông", "Nguyễn Lương Bằng", "Lương Định Của",
-    "177 Đội Cấn", "Nguyễn Thị Định",
+    "177 Đội Cấn", "Nguyễn Thị Định", "Hội Chợ",
 ]
 
 
@@ -312,7 +312,7 @@ def build_online_answer(text):
             grand_bills += total_bills
 
     if brand_filter in (None, "bpp"):
-        add_brand("bpp", "Beard Papa's (BPP) - 10 cơ sở", BPP_ACTIVE_BRANCHES, split_branches=False)
+        add_brand("bpp", "Beard Papa's (BPP) - 11 cơ sở", BPP_ACTIVE_BRANCHES, split_branches=False)
     if brand_filter in (None, "waji"):
         add_brand("waji", "Waji", None, split_branches=False)
     if brand_filter in (None, "39beef"):
