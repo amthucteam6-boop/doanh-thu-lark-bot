@@ -119,6 +119,17 @@ def fetch_invoices_since(branch_id, since_date_iso, headers, until_date_iso=None
     return invoices
 
 
+def _invoice_amount(inv):
+    """So tien thuc cua 1 hoa don. Chi lay Amount lam fallback khi TotalAmount
+    THUC SU THIEU (None/khong co key) - KHONG fallback khi TotalAmount = 0 hop
+    le (vd hoa don khuyen mai giam 100%, khach khong tra tien). Dung 'or' don
+    gian se coi 0 la falsy roi nham lay gia truoc khuyen mai, gay dem thua
+    doanh thu (da xay ra that: 4 hoa don Waji giam 100% ~257k/hoa don, sai
+    lech dung 1.028.000d khi hoi khoang ngay 1/8-13/8)."""
+    total_amount = inv.get("TotalAmount")
+    return float(total_amount) if total_amount is not None else float(inv.get("Amount") or 0)
+
+
 def fetch_brand_range(cukcuk_key, since_date_iso, until_date_iso=None):
     cfg = BRANDS_CUKCUK[cukcuk_key]
     # CukCuk thinh thoang tu choi tam thoi khi nhieu brand dang nhap gan nhau
@@ -140,7 +151,7 @@ def fetch_brand_range(cukcuk_key, since_date_iso, until_date_iso=None):
     per_branch = {}
     for inv in all_inv:
         bid = inv.get("BranchId")
-        rev = float(inv.get("TotalAmount") or inv.get("Amount") or 0)
+        rev = float(_invoice_amount(inv))
         d = per_branch.setdefault(bid, {"revenue": 0.0, "bills": 0})
         d["revenue"] += rev
         d["bills"] += 1
@@ -270,7 +281,7 @@ def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None, until_d
             ch = classify_online_channel(inv.get("TableName") or "")
             if ch is None:
                 continue
-            amt = float(inv.get("TotalAmount") or inv.get("Amount") or 0)
+            amt = float(_invoice_amount(inv))
             slot = by_channel.setdefault(ch, {"revenue": 0.0, "bills": 0})
             slot["revenue"] += amt
             slot["bills"] += 1
