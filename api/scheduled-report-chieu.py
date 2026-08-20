@@ -140,6 +140,17 @@ def classify_online_channel(table_name):
     return None
 
 
+def _invoice_amount(inv):
+    """So tien thuc cua 1 hoa don. Chi lay Amount lam fallback khi TotalAmount
+    THUC SU THIEU (None/khong co key) - KHONG fallback khi TotalAmount = 0 hop
+    le (vd hoa don khuyen mai giam 100%, khach khong tra tien). Dung 'or' don
+    gian se coi 0 la falsy roi nham lay gia truoc khuyen mai, gay dem thua
+    doanh thu (da xay ra that: 4 hoa don Waji giam 100% ~257k/hoa don, sai
+    lech dung 1.028.000d khi hoi khoang ngay 1/8-13/8)."""
+    total_amount = inv.get("TotalAmount")
+    return float(total_amount) if total_amount is not None else float(inv.get("Amount") or 0)
+
+
 def fetch_brand_at_cutoff(cukcuk_key, date_iso, cutoff_time, branch_filter=None):
     """Doanh thu (tong + kenh online) luy ke tu dau ngay toi cutoff_time
     (HH:MM:SS) cua 1 brand CukCuk - dung cho bao cao lich co dinh."""
@@ -163,7 +174,7 @@ def fetch_brand_at_cutoff(cukcuk_key, date_iso, cutoff_time, branch_filter=None)
             ref_time = (inv.get("RefDate") or "")[11:19]
             if ref_time > cutoff_time:
                 continue
-            amt = float(inv.get("TotalAmount") or inv.get("Amount") or 0)
+            amt = float(_invoice_amount(inv))
             rev += amt
             bills += 1
             ch = classify_online_channel(inv.get("TableName") or "")
