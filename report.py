@@ -108,6 +108,17 @@ def fetch_invoices(branch_id, date_iso, headers):
     return invoices
 
 
+def _invoice_amount(inv):
+    """So tien thuc cua 1 hoa don. Chi lay Amount lam fallback khi TotalAmount
+    THUC SU THIEU (None/khong co key) - KHONG fallback khi TotalAmount = 0 hop
+    le (vd hoa don khuyen mai giam 100%, khach khong tra tien). Dung 'or' don
+    gian se coi 0 la falsy roi nham lay gia truoc khuyen mai, gay dem thua
+    doanh thu (da xay ra that: 4 hoa don Waji giam 100% ~257k/hoa don, sai
+    lech dung 1.028.000d khi hoi khoang ngay 1/8-13/8)."""
+    total_amount = inv.get("TotalAmount")
+    return float(total_amount) if total_amount is not None else float(inv.get("Amount") or 0)
+
+
 def fetch_brand_slot(cukcuk_key, date_iso, cutoff):
     cfg = BRANDS_CUKCUK[cukcuk_key]
     # CukCuk thinh thoang tu choi tam thoi khi nhieu brand dang nhap gan nhau
@@ -130,7 +141,7 @@ def fetch_brand_slot(cukcuk_key, date_iso, cutoff):
     per_branch = {}
     for inv in filtered:
         bid = inv.get("BranchId")
-        rev = float(inv.get("TotalAmount") or inv.get("Amount") or 0)
+        rev = float(_invoice_amount(inv))
         d = per_branch.setdefault(bid, {"revenue": 0.0, "bills": 0})
         d["revenue"] += rev
         d["bills"] += 1
