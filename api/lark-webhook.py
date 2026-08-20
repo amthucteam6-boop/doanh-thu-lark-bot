@@ -92,10 +92,9 @@ def get_branches(headers):
     return [b for b in data.get("Data", []) if not b.get("Inactive") and not b.get("IsBaseDepot")]
 
 
-def fetch_invoices_since(branch_id, since_date_iso, headers):
-    """Lay hoa don tu since_date_iso (00:00) toi hien tai trong 1 lan quet - dung
-    chung cho ca 'hom nay' (since = hom nay) lan 'thang nay' (since = ngay 1 dau
-    thang), khong can goi rieng tung ngay."""
+def fetch_invoices_since(branch_id, since_date_iso, headers, until_date_iso=None):
+    """Lay hoa don tu since_date_iso (00:00) toi hien tai (hoac toi until_date_iso
+    neu co, dung cho khoang ngay tuy chon Anh hoi) trong 1 lan quet."""
     since = since_date_iso + "T00:00:00"
     page, invoices = 1, []
     while True:
@@ -106,8 +105,11 @@ def fetch_invoices_since(branch_id, since_date_iso, headers):
             if inv.get("PaymentStatus") in (4, 5):
                 continue
             ref_date = (inv.get("RefDate") or "")[:10]
-            if ref_date >= since_date_iso:
-                invoices.append(inv)
+            if ref_date < since_date_iso:
+                continue
+            if until_date_iso and ref_date > until_date_iso:
+                continue
+            invoices.append(inv)
         if len(data) < 100:
             break
         last_date = (data[-1].get("RefDate") or "")[:10]
@@ -117,7 +119,7 @@ def fetch_invoices_since(branch_id, since_date_iso, headers):
     return invoices
 
 
-def fetch_brand_range(cukcuk_key, since_date_iso):
+def fetch_brand_range(cukcuk_key, since_date_iso, until_date_iso=None):
     cfg = BRANDS_CUKCUK[cukcuk_key]
     # CukCuk thinh thoang tu choi tam thoi khi nhieu brand dang nhap gan nhau
     # (loi ung dung Code:200 kem ErrorType, khong phai loi mang nen retry o
@@ -132,7 +134,7 @@ def fetch_brand_range(cukcuk_key, since_date_iso):
     by_id = {b["Id"]: b["Name"] for b in branches}
     all_inv = []
     for b in branches:
-        for inv in fetch_invoices_since(b["Id"], since_date_iso, headers):
+        for inv in fetch_invoices_since(b["Id"], since_date_iso, headers, until_date_iso):
             inv["BranchId"] = b["Id"]
             all_inv.append(inv)
     per_branch = {}
@@ -175,6 +177,40 @@ def detect_period(text):
     return "today"
 
 
+_DATE_RANGE_RE = re.compile(
+    r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\s*(?:-|–|đến|den|tới|toi|->|~)\s*"
+    r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?"
+)
+
+
+def parse_date_range(text):
+    """Nhan dien khoang ngay tuy chon Anh go trong cau hoi, vd '1/8-13/8',
+    '1/8 - 13/8/2026', 'từ 1/8 đến 13/8'. Tra ve (since_iso, until_iso) hoac
+    None neu cau khong co khoang ngay nao."""
+    m = _DATE_RANGE_RE.search(text)
+    if not m:
+        return None
+    now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
+
+    def _year(y):
+        if not y:
+            return now_vn.year
+        y = int(y)
+        return 2000 + y if y < 100 else y
+
+    d1, mo1, y1, d2, mo2, y2 = m.groups()
+    try:
+        since = f"{_year(y1):04d}-{int(mo1):02d}-{int(d1):02d}"
+        until = f"{_year(y2):04d}-{int(mo2):02d}-{int(d2):02d}"
+        datetime.strptime(since, "%Y-%m-%d")
+        datetime.strptime(until, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if since > until:
+        since, until = until, since
+    return since, until
+
+
 def detect_report_type(text):
     t = text.lower()
     if "merchant" in t or "online" in t:
@@ -214,7 +250,7 @@ def classify_online_channel(table_name):
     return None
 
 
-def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None):
+def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None, until_date_iso=None):
     cfg = BRANDS_CUKCUK[cukcuk_key]
     try:
         token = cukcuk_login(cfg)
@@ -230,7 +266,7 @@ def fetch_online_revenue(cukcuk_key, since_date_iso, branch_filter=None):
         name = b["Name"].strip()
         by_channel = {}
         rev, bills = 0.0, 0
-        for inv in fetch_invoices_since(b["Id"], since_date_iso, headers):
+        for inv in fetch_invoices_since(b["Id"], since_date_iso, headers, until_date_iso):
             ch = classify_online_channel(inv.get("TableName") or "")
             if ch is None:
                 continue
@@ -267,11 +303,17 @@ def _channel_summary(by_channel):
 
 
 def build_online_answer(text):
-    period = detect_period(text)
+    date_range = parse_date_range(text)
     brand_filter = detect_brand(text)
     now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
+    until_date = None
 
-    if period == "month":
+    if date_range:
+        since_date, until_date = date_range
+        d1 = datetime.strptime(since_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        d2 = datetime.strptime(until_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        header = f"Doanh thu kênh Merchant/Online — {d1} — {d2}"
+    elif detect_period(text) == "month":
         since_date = now_vn.strftime("%Y-%m-01")
         header = f"Doanh thu kênh Merchant/Online — tháng {now_vn.month}/{now_vn.year} (tính đến {now_vn.strftime('%d/%m %H:%M')})"
     else:
@@ -286,7 +328,7 @@ def build_online_answer(text):
         nonlocal grand_total, grand_bills
         icon = UNIT_ICON.get(cukcuk_key, "🔸")
         try:
-            by_branch = fetch_online_revenue(cukcuk_key, since_date, branch_filter_names)
+            by_branch = fetch_online_revenue(cukcuk_key, since_date, branch_filter_names, until_date)
         except Exception as exc:  # noqa: BLE001
             lines.append(f"⚠️ **{label}**: lỗi lấy dữ liệu ({str(exc)[:80]})")
             lines.append("")
@@ -326,11 +368,18 @@ def build_online_answer(text):
 
 
 def build_answer(text):
-    period = detect_period(text)
+    date_range = parse_date_range(text)
     brand_filter = detect_brand(text)
     now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
+    until_date = None
 
-    if period == "month":
+    if date_range:
+        since_date, until_date = date_range
+        d1 = datetime.strptime(since_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        d2 = datetime.strptime(until_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        header = f"Doanh thu {d1} — {d2}"
+        all_units = DISPLAY_UNITS_MONTH
+    elif detect_period(text) == "month":
         since_date = now_vn.strftime("%Y-%m-01")
         header = f"Doanh thu tháng {now_vn.month}/{now_vn.year} (tính đến {now_vn.strftime('%d/%m %H:%M')})"
         all_units = DISPLAY_UNITS_MONTH
@@ -347,7 +396,7 @@ def build_answer(text):
     for unit_key, label, cukcuk_key, match in units:
         if cukcuk_key not in cache and cukcuk_key not in errors:
             try:
-                cache[cukcuk_key] = fetch_brand_range(cukcuk_key, since_date)
+                cache[cukcuk_key] = fetch_brand_range(cukcuk_key, since_date, until_date)
             except Exception as exc:  # noqa: BLE001
                 errors[cukcuk_key] = str(exc)
         if cukcuk_key in errors:
