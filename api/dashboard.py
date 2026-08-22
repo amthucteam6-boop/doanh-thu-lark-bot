@@ -2,8 +2,9 @@
 Backend cho trang web Doanh thu 3 Brand — phien ban chay tren Vercel (khong
 con phu thuoc may Mac/server local). KHONG dung cache file cuc bo (Vercel
 serverless khong giu file lau dai giua cac lan goi) - moi thu tinh TRUC TIEP
-tu CukCuk moi lan goi. Ghi chu tung brand luu qua GitHub Contents API (repo
-nay), vi day la noi duy nhat co the ghi ben vung tu Vercel serverless.
+tu CukCuk moi lan goi (rieng cache ngay-da-qua cho action=month, xem phia
+duoi). Ghi chu tung brand luu qua GitHub Contents API (repo nay), vi day la
+noi duy nhat co the ghi ben vung tu Vercel serverless.
 
 Endpoint duy nhat /api/dashboard, dieu huong theo query param "action":
   GET  ?action=state&date=YYYY-MM-DD        -> doanh thu 3 khung gio + so sanh hom qua
