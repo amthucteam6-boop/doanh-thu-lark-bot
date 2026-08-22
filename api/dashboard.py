@@ -181,7 +181,7 @@ def fetch_brand_invoices(cukcuk_key, since_date_iso, until_date_iso, branch_filt
         return invs
 
     all_invoices = []
-    with ThreadPoolExecutor(max_workers=min(len(branches), 10) or 1) as ex:
+    with ThreadPoolExecutor(max_workers=len(branches) or 1) as ex:
         for invs in ex.map(_fetch, branches):
             all_invoices.extend(invs)
     return all_invoices
@@ -278,44 +278,111 @@ def action_state(date_iso):
 
 
 # --- action=month ---
+# Ngay DA QUA (khac hom nay) la du lieu bat bien - luu cache qua GitHub Contents
+# API (data/month-cache.json) de khoi phai quet lai toan bo CukCuk moi lan tai
+# trang (BPP ~500-600 bill/ngay x 11 chi nhanh khien 1 lan quet ca thang mat
+# 50-60s tren Vercel, sat/vuot tran maxDuration 60s -> 504 that, da xay ra khi
+# thang da qua ~20 ngay). CHI hom nay moi luon tinh moi 100% tu CukCuk - dung
+# tinh than "khong cache du lieu con dang bien doi" ma Anh yeu cau ban dau.
+
+MONTH_CACHE_PATH_IN_REPO = "data/month-cache.json"
+
+
+def _load_month_cache():
+    current = github_api("GET", f"/repos/{GITHUB_REPO}/contents/{MONTH_CACHE_PATH_IN_REPO}")
+    if current is None:
+        return {}, None
+    content = base64.b64decode(current["content"]).decode("utf-8")
+    cache = json.loads(content) if content.strip() else {}
+    return cache, current["sha"]
+
+
+def _save_month_cache(cache, sha):
+    content_b64 = base64.b64encode(
+        json.dumps(cache, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    ).decode("ascii")
+    payload = {"message": "Cap nhat cache doanh thu theo ngay", "content": content_b64}
+    if sha:
+        payload["sha"] = sha
+    github_api("PUT", f"/repos/{GITHUB_REPO}/contents/{MONTH_CACHE_PATH_IN_REPO}", payload)
+
 
 def action_month(year_month):
     year, month = int(year_month[:4]), int(year_month[5:7])
     n_days = calendar.monthrange(year, month)[1]
     now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
     today = now_vn.strftime("%Y-%m-%d")
-    month_start = f"{year_month}-01"
     month_end = f"{year_month}-{n_days:02d}"
     fetch_until = min(month_end, today)
-
-    raw = fetch_real_brands(month_start, fetch_until)
-
-    day_totals = {u: {} for u in MONTH_UNITS}
-    errors = {}
-    for unit_key, meta in MONTH_UNITS.items():
-        invs, err = raw[meta["cukcuk_brand"]]
-        if err:
-            errors[unit_key] = err
-            continue
-        for inv in invs:
-            d = (inv.get("RefDate") or "")[:10]
-            slot = day_totals[unit_key].setdefault(d, {"revenue": 0.0, "bills": 0})
-            slot["revenue"] += _invoice_amount(inv)
-            slot["bills"] += 1
-
     all_dates = [f"{year_month}-{d:02d}" for d in range(1, n_days + 1)]
+    dates_needed = [d for d in all_dates if d <= fetch_until]
+
+    cache, cache_sha = {}, None
+    cache_usable = bool(GITHUB_TOKEN)
+    if cache_usable:
+        try:
+            cache, cache_sha = _load_month_cache()
+        except RuntimeError:
+            cache_usable = False
+            cache = {}
+
+    # Ngay can goi CukCuk = hom nay (luon luon) + bat ky ngay da qua nao CHUA co
+    # trong cache (lan dau xem thang nay, hoac cache chua duoc bat).
+    missing_dates = [d for d in dates_needed if d == today or d not in cache]
+
+    errors = {}
+    today_row = None
+    if missing_dates:
+        fetch_from, fetch_to = min(missing_dates), max(missing_dates)
+        raw = fetch_real_brands(fetch_from, fetch_to)
+        missing_set = set(missing_dates)
+        day_totals = {u: {} for u in MONTH_UNITS}
+        for unit_key, meta in MONTH_UNITS.items():
+            invs, err = raw[meta["cukcuk_brand"]]
+            if err:
+                errors[unit_key] = err
+                continue
+            for inv in invs:
+                d = (inv.get("RefDate") or "")[:10]
+                if d not in missing_set:
+                    continue
+                day_totals[unit_key][d] = day_totals[unit_key].get(d, 0.0) + _invoice_amount(inv)
+
+        newly_closed = {}
+        for d in missing_dates:
+            if d == today:
+                continue  # hom nay chua chot, khong ghi cache
+            row = {u: day_totals[u].get(d, 0.0) for u in MONTH_UNITS if u not in errors}
+            if len(row) == len(MONTH_UNITS):
+                cache[d] = row
+                newly_closed[d] = row
+        if newly_closed and cache_usable:
+            try:
+                _save_month_cache(cache, cache_sha)
+            except RuntimeError:
+                pass  # loi ghi cache khong duoc lam hong response chinh
+
+        if today in missing_set:
+            today_row = {u: day_totals[u].get(today, 0.0) for u in MONTH_UNITS}
+
     days_out = []
     totals = {u: 0.0 for u in MONTH_UNITS}
     counted = {u: 0 for u in MONTH_UNITS}
     for d in all_dates:
         row = {"date": d}
         for u in MONTH_UNITS:
-            if d > today:
+            if d > fetch_until:
                 row[u] = None
                 continue
-            rec = day_totals[u].get(d)
-            row[u] = rec["revenue"] if rec else 0.0
-            totals[u] += row[u]
+            if d == today and today_row is not None:
+                val = today_row.get(u, 0.0)
+            elif d in cache:
+                val = cache[d].get(u, 0.0)
+            else:
+                row[u] = None  # brand loi ngay nay, khong co du lieu
+                continue
+            row[u] = val
+            totals[u] += val
             counted[u] += 1
         days_out.append(row)
 
