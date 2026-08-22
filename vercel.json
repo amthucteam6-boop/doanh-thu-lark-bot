@@ -11,6 +11,9 @@
     },
     "api/scheduled-report-toi.py": {
       "maxDuration": 60
+    },
+    "api/dashboard.py": {
+      "maxDuration": 60
     }
   },
   "crons": [
