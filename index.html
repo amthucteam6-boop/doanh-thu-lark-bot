@@ -146,13 +146,13 @@
   .tab.active.waji { background: var(--waji-brand); color: #fff; box-shadow: 0 4px 14px rgba(93,105,87,.4); }
   .tab.active.beef { background: var(--beef-brand); color: #fff; box-shadow: 0 4px 14px rgba(208,32,40,.4); }
 
-  .notes-box textarea {
-    width: 100%; min-height: 110px; resize: vertical; font-family: inherit; font-size: 13.5px;
-    padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: var(--text);
-    box-sizing: border-box;
-  }
-  .notes-save-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-  .notes-updated { font-size: 11.5px; color: var(--text-muted); }
+  .month-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+  .month-extra-card { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+  .month-extra-card .mec-title { font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
+  .month-extra-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; padding: 3px 0; }
+  .month-extra-row .lbl { color: var(--text-muted); }
+  .month-extra-row .val { font-weight: 700; }
+  .month-extra-hint { font-size: 11px; color: var(--text-muted); margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -161,7 +161,7 @@
   <header>
     <div>
       <h1 id="page-title">🌸 Doanh thu 3 Brand — Sakuko Việt Nam</h1>
-      <div class="sub" id="page-sub">BPP · Waji · 39Beef — luỹ kế theo 3 khung giờ: Trưa (12h) · Chiều (15h) · Tối (22h) — tự động từ CukCuk</div>
+      <div class="sub" id="page-sub">BPP · Waji · 39Beef — luỹ kế theo 3 khung giờ: Trưa (12h30) · Chiều (15h) · Tối (22h30) — tự động từ CukCuk</div>
     </div>
     <div class="date-control">
       <span class="clock" id="clock"></span>
@@ -173,20 +173,6 @@
   <div class="tabs" id="brand-tabs"></div>
 
   <div class="status-line" id="status-line"></div>
-
-  <div class="section" id="notes-section" style="display:none;">
-    <div class="section-head">
-      <h3 class="section-title" id="notes-title">📝 Ghi chú</h3>
-      <span class="notes-updated" id="notes-updated"></span>
-    </div>
-    <div class="notes-box">
-      <textarea id="notes-text" placeholder="Ghi chú vận hành, kế hoạch marketing, lý do tăng/giảm doanh thu..."></textarea>
-      <div class="notes-save-row">
-        <button class="btn primary" id="notes-save-btn">💾 Lưu ghi chú</button>
-        <span class="month-note" id="notes-status"></span>
-      </div>
-    </div>
-  </div>
 
   <div class="brand-grid" id="brand-grid"></div>
 
@@ -221,6 +207,8 @@
         <tfoot id="month-foot"></tfoot>
       </table>
     </div>
+    <div class="month-extra" id="month-extra"></div>
+    <div class="month-extra-hint" id="month-extra-hint"></div>
   </div>
 
 </div>
@@ -235,9 +223,9 @@ const BRANDS = [
   { key: '39beef_vph', label: '39Beef - 34 Vũ Phạm Hàm', cls: 'beef', logo: '39' },
 ];
 const SLOTS = [
-  { key: 'trua', label: 'Trưa', time: '12:00', hourEnd: 12 },
-  { key: 'chieu', label: 'Chiều', time: '15:00', hourEnd: 15 },
-  { key: 'toi', label: 'Tối', time: '22:00', hourEnd: 24 },
+  { key: 'trua', label: 'Trưa', time: '12:30', cutoff: '12:30:00' },
+  { key: 'chieu', label: 'Chiều', time: '15:00', cutoff: '15:00:00' },
+  { key: 'toi', label: 'Tối', time: '22:30', cutoff: '23:59:59' },
 ];
 
 const BRAND_TABS = [
@@ -247,10 +235,10 @@ const BRAND_TABS = [
   { key: '39beef', label: '🥩 39Beef', cls: 'beef' },
 ];
 const BRAND_PAGE_TITLE = {
-  null: { title: '🌸 Doanh thu 3 Brand — Sakuko Việt Nam', sub: 'BPP · Waji · 39Beef — luỹ kế theo 3 khung giờ: Trưa (12h) · Chiều (15h) · Tối (22h) — tự động từ CukCuk' },
-  bpp: { title: "🥐 Beard Papa's (BPP)", sub: '11 cơ sở — luỹ kế theo 3 khung giờ: Trưa (12h) · Chiều (15h) · Tối (22h) — tự động từ CukCuk' },
-  waji: { title: '🍚 Waji', sub: 'luỹ kế theo 3 khung giờ: Trưa (12h) · Chiều (15h) · Tối (22h) — tự động từ CukCuk' },
-  '39beef': { title: '🥩 39Beef', sub: '2 cơ sở (245 Tô Hiệu · 34 Vũ Phạm Hàm) — luỹ kế theo 3 khung giờ: Trưa (12h) · Chiều (15h) · Tối (22h) — tự động từ CukCuk' },
+  null: { title: '🌸 Doanh thu 3 Brand — Sakuko Việt Nam', sub: 'BPP · Waji · 39Beef — luỹ kế theo 3 khung giờ: Trưa (12h30) · Chiều (15h) · Tối (22h30) — tự động từ CukCuk' },
+  bpp: { title: "🥐 Beard Papa's (BPP)", sub: '11 cơ sở — luỹ kế theo 3 khung giờ: Trưa (12h30) · Chiều (15h) · Tối (22h30) — tự động từ CukCuk' },
+  waji: { title: '🍚 Waji', sub: 'luỹ kế theo 3 khung giờ: Trưa (12h30) · Chiều (15h) · Tối (22h30) — tự động từ CukCuk' },
+  '39beef': { title: '🥩 39Beef', sub: '2 cơ sở (245 Tô Hiệu · 34 Vũ Phạm Hàm) — luỹ kế theo 3 khung giờ: Trưa (12h30) · Chiều (15h) · Tối (22h30) — tự động từ CukCuk' },
 };
 
 function brandGridKeys(viewBrand) {
@@ -277,8 +265,9 @@ function fmtK(v) {
 }
 
 function currentSlotKey() {
-  const h = new Date().getHours();
-  for (const s of SLOTS) if (h < s.hourEnd) return s.key;
+  const now = new Date();
+  const hhmmss = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  for (const s of SLOTS) if (hhmmss <= s.cutoff) return s.key;
   return 'toi';
 }
 
@@ -500,6 +489,47 @@ async function loadMonth() {
   note.textContent = Object.keys(data.errors || {}).length
     ? 'Lỗi: ' + Object.entries(data.errors).map(([b,e]) => `${b}: ${e}`).join(' | ')
     : `Số liệu trực tiếp từ CukCuk, luôn cập nhật mới nhất tính đến lúc tải.`;
+
+  renderMonthExtra(data, cols);
+}
+
+const MONTH_UNIT_LABEL = { bpp: 'BPP', waji: 'Waji', '39beef': '39Beef' };
+
+function monthName(yyyyMm) {
+  if (!yyyyMm) return '';
+  const [y, m] = yyyyMm.split('-');
+  return `Tháng ${parseInt(m,10)}/${y}`;
+}
+
+function renderMonthExtra(data, cols) {
+  const wrap = document.getElementById('month-extra');
+  const hint = document.getElementById('month-extra-hint');
+  if (!data.is_current_month || !data.mom_compare || !data.projection) {
+    wrap.innerHTML = '';
+    hint.textContent = '';
+    return;
+  }
+  const thisMonthLabel = monthName(data.month);
+  const prevMonthLabel = monthName(data.prev_month);
+
+  wrap.innerHTML = cols.map(c => {
+    const mom = data.mom_compare[c.key];
+    const proj = data.projection[c.key];
+    if (!mom) return '';
+    const cls = mom.pct === null ? 'flat' : mom.pct > 2 ? 'up' : mom.pct < -2 ? 'down' : 'flat';
+    const arrow = mom.pct === null ? '⚪' : mom.pct > 2 ? '▲' : mom.pct < -2 ? '▼' : '▬';
+    return `
+    <div class="month-extra-card">
+      <div class="mec-title">${MONTH_UNIT_LABEL[c.key] || c.key}</div>
+      <div class="month-extra-row"><span class="lbl">${thisMonthLabel} (${data.days_elapsed} ngày đầu)</span><span class="val">${fmtMoney(mom.current_partial)}</span></div>
+      <div class="month-extra-row"><span class="lbl">${prevMonthLabel} (cùng ${data.days_elapsed} ngày đầu)</span><span class="val">${fmtMoney(mom.prev_partial)}</span></div>
+      <div class="month-extra-row"><span class="lbl">So với cùng kỳ</span><span class="val delta ${cls}" style="margin-left:0;">${arrow} ${pctLabel(mom.pct)}</span></div>
+      <div class="month-extra-row"><span class="lbl">Cả ${prevMonthLabel}</span><span class="val">${fmtMoney(mom.prev_full)}</span></div>
+      <div class="month-extra-row"><span class="lbl">💡 Dự kiến cuối ${thisMonthLabel}</span><span class="val">${proj !== null ? fmtMoney(proj) : '—'}</span></div>
+    </div>`;
+  }).join('');
+
+  hint.textContent = `So sánh cùng kỳ: ${data.days_elapsed} ngày đầu ${thisMonthLabel} so với ${data.days_elapsed} ngày đầu ${prevMonthLabel}. Dự kiến cuối tháng = ước lượng đơn giản theo nhịp doanh thu trung bình/ngày từ đầu tháng tới nay nhân với ${data.days_in_month} ngày — chỉ mang tính tham khảo, chưa tính mùa vụ/ngày lễ.`;
 }
 
 const ONLINE_BRAND_LABELS = { bpp: "Beard Papa's (BPP) — 11 cơ sở", waji: 'Waji', '39beef': '39Beef' };
@@ -556,45 +586,6 @@ async function loadOnlineRevenue() {
 
 document.getElementById('online-revenue-btn').addEventListener('click', loadOnlineRevenue);
 
-const NOTES_TITLE = { bpp: '📝 Ghi chú BPP', waji: '📝 Ghi chú Waji', '39beef': '📝 Ghi chú 39Beef' };
-
-async function loadNotes() {
-  const section = document.getElementById('notes-section');
-  if (state.viewBrand === null) { section.style.display = 'none'; return; }
-  section.style.display = '';
-  document.getElementById('notes-title').textContent = NOTES_TITLE[state.viewBrand];
-  document.getElementById('notes-status').textContent = '';
-  try {
-    const data = await api(`/api/dashboard?action=notes&brand=${state.viewBrand}`);
-    document.getElementById('notes-text').value = data.text || '';
-    document.getElementById('notes-updated').textContent = data.updated_at ? `Cập nhật lần cuối: ${data.updated_at.replace('T',' ')}` : '';
-  } catch (err) {
-    showToast(err.message, true);
-  }
-}
-
-async function saveNotes() {
-  if (state.viewBrand === null) return;
-  const btn = document.getElementById('notes-save-btn');
-  const text = document.getElementById('notes-text').value;
-  btn.disabled = true;
-  try {
-    const data = await api(`/api/dashboard?action=notes&brand=${state.viewBrand}`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text }),
-    });
-    document.getElementById('notes-updated').textContent = `Cập nhật lần cuối: ${data.updated_at.replace('T',' ')}`;
-    document.getElementById('notes-status').textContent = '✅ Đã lưu';
-    setTimeout(() => { document.getElementById('notes-status').textContent = ''; }, 2500);
-  } catch (err) {
-    showToast(err.message, true);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-document.getElementById('notes-save-btn').addEventListener('click', saveNotes);
-
 function renderTabs() {
   const el = document.getElementById('brand-tabs');
   el.innerHTML = BRAND_TABS.map(t =>
@@ -613,7 +604,6 @@ function switchTab(viewBrand) {
   renderTabs();
   render();
   loadMonth();
-  loadNotes();
   document.getElementById('online-revenue-body').innerHTML = '';
   document.getElementById('online-revenue-note').textContent = 'Bấm nút để tra cứu doanh thu kênh online ngày đang chọn ở trên (có thể mất chút thời gian vì quét nhiều chi nhánh).';
 }
