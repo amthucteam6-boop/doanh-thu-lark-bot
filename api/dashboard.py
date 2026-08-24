@@ -3,15 +3,14 @@ Backend cho trang web Doanh thu 3 Brand — phien ban chay tren Vercel (khong
 con phu thuoc may Mac/server local). KHONG dung cache file cuc bo (Vercel
 serverless khong giu file lau dai giua cac lan goi) - moi thu tinh TRUC TIEP
 tu CukCuk moi lan goi (rieng cache ngay-da-qua cho action=month, xem phia
-duoi). Ghi chu tung brand luu qua GitHub Contents API (repo nay), vi day la
-noi duy nhat co the ghi ben vung tu Vercel serverless.
+duoi, luu qua GitHub Contents API vi day la noi duy nhat co the ghi ben vung
+tu Vercel serverless).
 
 Endpoint duy nhat /api/dashboard, dieu huong theo query param "action":
-  GET  ?action=state&date=YYYY-MM-DD        -> doanh thu 3 khung gio + so sanh hom qua
-  GET  ?action=month&month=YYYY-MM          -> tong hop theo ngay ca thang
-  GET  ?action=online&date=YYYY-MM-DD       -> doanh thu kenh Merchant/Online
-  GET  ?action=notes&brand=bpp|waji|39beef  -> lay ghi chu
-  POST ?action=notes&brand=...  body {text} -> luu ghi chu (qua GitHub)
+  GET  ?action=state&date=YYYY-MM-DD  -> doanh thu 3 khung gio + so sanh hom qua
+  GET  ?action=month&month=YYYY-MM    -> tong hop theo ngay ca thang + so sanh
+                                          thang truoc + du phong cuoi thang
+  GET  ?action=online&date=YYYY-MM-DD -> doanh thu kenh Merchant/Online
 """
 
 import base64
@@ -50,7 +49,7 @@ MONTH_UNITS = {
     "39beef": {"cukcuk_brand": "39beef", "branch_match": None},
 }
 
-SLOT_CUTOFFS = {"trua": "12:00:00", "chieu": "15:00:00", "toi": "22:00:00"}
+SLOT_CUTOFFS = {"trua": "12:30:00", "chieu": "15:00:00", "toi": "22:30:00"}
 SLOT_ORDER = ["trua", "chieu", "toi"]
 
 ONLINE_CHANNEL_PREFIXES = [
@@ -69,8 +68,6 @@ BPP_ACTIVE_BRANCHES = [
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO = "amthucteam6-boop/doanh-thu-lark-bot"
-NOTES_PATH_IN_REPO = "data/notes.json"
-NOTE_BRANDS = ("bpp", "waji", "39beef")
 
 
 def http_json(method, url, payload=None, headers=None, params=None, timeout=25, retries=3):
@@ -308,7 +305,13 @@ def _save_month_cache(cache, sha):
     github_api("PUT", f"/repos/{GITHUB_REPO}/contents/{MONTH_CACHE_PATH_IN_REPO}", payload)
 
 
-def action_month(year_month):
+def _month_day_totals(year_month):
+    """Tra ve {date: {unit: revenue}} cho toan bo year_month tinh den
+    min(cuoi thang, hom nay), cung errors va fetch_until/all_dates. Dung
+    cache GitHub cho ngay DA QUA, luon fetch song cho HOM NAY neu year_month
+    la thang hien tai. Ham dung chung cho ca thang dang xem lan thang truoc
+    (de tinh so sanh) - moi lan goi tu doc/ghi cache rieng, khong chia se sha
+    giua 2 lan goi lien tiep de tranh xung dot ghi (409)."""
     year, month = int(year_month[:4]), int(year_month[5:7])
     n_days = calendar.monthrange(year, month)[1]
     now_vn = datetime.now(ZoneInfo("Asia/Saigon"))
@@ -337,7 +340,7 @@ def action_month(year_month):
         fetch_from, fetch_to = min(missing_dates), max(missing_dates)
         raw = fetch_real_brands(fetch_from, fetch_to)
         missing_set = set(missing_dates)
-        day_totals = {u: {} for u in MONTH_UNITS}
+        fresh = {u: {} for u in MONTH_UNITS}
         for unit_key, meta in MONTH_UNITS.items():
             invs, err = raw[meta["cukcuk_brand"]]
             if err:
@@ -347,13 +350,13 @@ def action_month(year_month):
                 d = (inv.get("RefDate") or "")[:10]
                 if d not in missing_set:
                     continue
-                day_totals[unit_key][d] = day_totals[unit_key].get(d, 0.0) + _invoice_amount(inv)
+                fresh[unit_key][d] = fresh[unit_key].get(d, 0.0) + _invoice_amount(inv)
 
         newly_closed = {}
         for d in missing_dates:
             if d == today:
                 continue  # hom nay chua chot, khong ghi cache
-            row = {u: day_totals[u].get(d, 0.0) for u in MONTH_UNITS if u not in errors}
+            row = {u: fresh[u].get(d, 0.0) for u in MONTH_UNITS if u not in errors}
             if len(row) == len(MONTH_UNITS):
                 cache[d] = row
                 newly_closed[d] = row
@@ -364,30 +367,84 @@ def action_month(year_month):
                 pass  # loi ghi cache khong duoc lam hong response chinh
 
         if today in missing_set:
-            today_row = {u: day_totals[u].get(today, 0.0) for u in MONTH_UNITS}
+            today_row = {u: fresh[u].get(today, 0.0) for u in MONTH_UNITS}
+
+    day_totals = {}
+    for d in dates_needed:
+        if d == today and today_row is not None:
+            day_totals[d] = today_row
+        elif d in cache:
+            day_totals[d] = cache[d]
+        # else: brand loi ngay nay, bo qua - khong co du lieu
+
+    return day_totals, errors, fetch_until, all_dates, n_days
+
+
+def action_month(year_month):
+    day_totals, errors, fetch_until, all_dates, n_days = _month_day_totals(year_month)
 
     days_out = []
     totals = {u: 0.0 for u in MONTH_UNITS}
     counted = {u: 0 for u in MONTH_UNITS}
     for d in all_dates:
         row = {"date": d}
+        rec = day_totals.get(d)
         for u in MONTH_UNITS:
-            if d > fetch_until:
+            if d > fetch_until or rec is None:
                 row[u] = None
                 continue
-            if d == today and today_row is not None:
-                val = today_row.get(u, 0.0)
-            elif d in cache:
-                val = cache[d].get(u, 0.0)
-            else:
-                row[u] = None  # brand loi ngay nay, khong co du lieu
-                continue
+            val = rec.get(u, 0.0)
             row[u] = val
             totals[u] += val
             counted[u] += 1
         days_out.append(row)
 
-    return {"month": year_month, "days": days_out, "totals": totals, "counted": counted, "errors": errors}
+    today_vn = datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")
+    is_current_month = year_month == today_vn[:7]
+
+    prev_month_key, mom_compare, projection, days_elapsed = None, None, None, None
+    prev_errors = {}
+    if is_current_month:
+        days_elapsed = int(today_vn[-2:])
+        year, month = int(year_month[:4]), int(year_month[5:7])
+        prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+        prev_month_key = f"{prev_year:04d}-{prev_month:02d}"
+        prev_n_days = calendar.monthrange(prev_year, prev_month)[1]
+        prev_day_totals, prev_errors, _, _, _ = _month_day_totals(prev_month_key)
+
+        cap = min(days_elapsed, prev_n_days)
+        prev_partial = {u: 0.0 for u in MONTH_UNITS}
+        prev_full = {u: 0.0 for u in MONTH_UNITS}
+        for d, rec in prev_day_totals.items():
+            day_num = int(d[-2:])
+            for u in MONTH_UNITS:
+                v = rec.get(u, 0.0)
+                prev_full[u] += v
+                if day_num <= cap:
+                    prev_partial[u] += v
+
+        mom_compare = {}
+        projection = {}
+        for u in MONTH_UNITS:
+            cur, prev = totals[u], prev_partial[u]
+            mom_compare[u] = {
+                "current_partial": cur,
+                "prev_partial": prev,
+                "prev_full": prev_full[u],
+                "pct": ((cur - prev) / prev * 100) if prev else None,
+            }
+            # Du phong don gian theo toc do trung binh/ngay tu dau thang toi
+            # gio - khong tinh mua vu/ngay trong tuan, chi la uoc luong tham
+            # khao ("neu giu nguyen nhip nay het thang").
+            projection[u] = (cur / days_elapsed * n_days) if days_elapsed else None
+
+    return {
+        "month": year_month, "days": days_out, "totals": totals, "counted": counted,
+        "errors": errors, "days_in_month": n_days,
+        "is_current_month": is_current_month, "days_elapsed": days_elapsed,
+        "prev_month": prev_month_key, "prev_month_errors": prev_errors,
+        "mom_compare": mom_compare, "projection": projection,
+    }
 
 
 # --- action=online ---
@@ -420,11 +477,11 @@ def action_online(date_iso):
     return {"date": date_iso, "brands": result, "errors": errors}
 
 
-# --- action=notes (GitHub Contents API lam kho luu ben vung) ---
+# --- luu tru ben vung qua GitHub Contents API (dung cho cache thang) ---
 
 def github_api(method, path, payload=None):
     if not GITHUB_TOKEN:
-        raise RuntimeError("Chưa cấu hình GITHUB_TOKEN trên Vercel — ghi chú chưa lưu được.")
+        raise RuntimeError("Chưa cấu hình GITHUB_TOKEN trên Vercel.")
     req = urllib.request.Request(
         f"https://api.github.com{path}",
         data=json.dumps(payload).encode("utf-8") if payload is not None else None,
@@ -439,32 +496,6 @@ def github_api(method, path, payload=None):
         if e.code == 404:
             return None
         raise RuntimeError(f"GitHub API lỗi {e.code}: {e.read().decode('utf-8', 'replace')[:200]}") from None
-
-
-def _load_notes_file():
-    current = github_api("GET", f"/repos/{GITHUB_REPO}/contents/{NOTES_PATH_IN_REPO}")
-    if current is None:
-        return {}, None
-    content = base64.b64decode(current["content"]).decode("utf-8")
-    notes = json.loads(content) if content.strip() else {}
-    return notes, current["sha"]
-
-
-def action_notes_get(brand):
-    notes, _ = _load_notes_file()
-    return notes.get(brand, {"text": "", "updated_at": None})
-
-
-def action_notes_save(brand, text):
-    notes, sha = _load_notes_file()
-    entry = {"text": text, "updated_at": datetime.now(ZoneInfo("Asia/Saigon")).isoformat(timespec="seconds")}
-    notes[brand] = entry
-    content_b64 = base64.b64encode(json.dumps(notes, ensure_ascii=False, indent=2).encode("utf-8")).decode("ascii")
-    payload = {"message": f"Cap nhat ghi chu {brand} tu dashboard web", "content": content_b64}
-    if sha:
-        payload["sha"] = sha
-    github_api("PUT", f"/repos/{GITHUB_REPO}/contents/{NOTES_PATH_IN_REPO}", payload)
-    return entry
 
 
 class handler(BaseHTTPRequestHandler):
@@ -482,12 +513,6 @@ class handler(BaseHTTPRequestHandler):
             elif action == "online":
                 date_iso = (params.get("date") or [datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")])[0]
                 self._respond(200, action_online(date_iso))
-            elif action == "notes":
-                brand = (params.get("brand") or [""])[0]
-                if brand not in NOTE_BRANDS:
-                    self._respond(400, {"error": f"brand không hợp lệ: {brand}"})
-                    return
-                self._respond(200, action_notes_get(brand))
             else:
                 self._respond(400, {"error": f"action không hợp lệ: {action!r}"})
         except Exception as exc:  # noqa: BLE001
@@ -497,24 +522,7 @@ class handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
         action = (params.get("action") or [""])[0]
-        length = int(self.headers.get("Content-Length", 0))
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
-        except json.JSONDecodeError:
-            self._respond(400, {"error": "invalid json"})
-            return
-        try:
-            if action == "notes":
-                brand = (params.get("brand") or [""])[0]
-                if brand not in NOTE_BRANDS:
-                    self._respond(400, {"error": f"brand không hợp lệ: {brand}"})
-                    return
-                entry = action_notes_save(brand, body.get("text", ""))
-                self._respond(200, entry)
-            else:
-                self._respond(400, {"error": f"action không hợp lệ: {action!r}"})
-        except Exception as exc:  # noqa: BLE001
-            self._respond(500, {"error": str(exc)})
+        self._respond(400, {"error": f"action không hợp lệ: {action!r}"})
 
     def _respond(self, status, payload):
         self.send_response(status)
