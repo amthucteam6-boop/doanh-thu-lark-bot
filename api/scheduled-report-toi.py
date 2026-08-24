@@ -47,7 +47,7 @@ LARK_APP_SECRET = os.environ.get("LARK_APP_SECRET", "")
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 SLOT_CUTOFFS = {"trua": "12:00:00", "chieu": "15:00:00", "toi": "22:00:00"}
-SLOT_LABELS = {"trua": "Trưa (12h)", "chieu": "Chiều (15h)", "toi": "Tối (22h)"}
+SLOT_LABELS = {"trua": "Trưa (12h30)", "chieu": "Chiều (15h)", "toi": "Tối (22h30)"}
 
 ONLINE_CHANNEL_PREFIXES = [
     "grabfood", "grab", "shopeefood", "shopee", "foody", "befood",
