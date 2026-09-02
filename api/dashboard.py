@@ -401,11 +401,23 @@ def action_month(year_month):
 
     today_vn = datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")
     is_current_month = year_month == today_vn[:7]
+    # Thang ngay lien truoc thang hien tai (vd Thang 8 khi hom nay o Thang 9)
+    # - da DONG HOAN TOAN nhung Anh van muon xem danh gia + de xuat muc tieu
+    # thang ke tiep ngay sau khi thang vua ket thuc, khong phai doi den luc
+    # thang do lai la "thang dang xem hien tai".
+    today_year, today_month_num = int(today_vn[:4]), int(today_vn[5:7])
+    lc_year, lc_month = (today_year - 1, 12) if today_month_num == 1 else (today_year, today_month_num - 1)
+    is_last_completed_month = year_month == f"{lc_year:04d}-{lc_month:02d}"
 
     prev_month_key, mom_compare, projection, days_elapsed = None, None, None, None
     prev_errors = {}
-    if is_current_month:
-        days_elapsed = int(today_vn[-2:])
+    if is_current_month or is_last_completed_month:
+        # days_elapsed = so ngay trong thang nay DA CO du lieu (chinh la
+        # ngay cua fetch_until) - voi thang hien tai la so ngay da qua ke tu
+        # dau thang, voi thang vua dong la CA THANG (fetch_until = ngay
+        # cuoi thang) nen cong thuc du phong ben duoi tu quy ve dung bang
+        # tong thuc te, khong con la "du phong" nua.
+        days_elapsed = int(fetch_until[-2:])
         year, month = int(year_month[:4]), int(year_month[5:7])
         prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
         prev_month_key = f"{prev_year:04d}-{prev_month:02d}"
@@ -441,7 +453,9 @@ def action_month(year_month):
     return {
         "month": year_month, "days": days_out, "totals": totals, "counted": counted,
         "errors": errors, "days_in_month": n_days,
-        "is_current_month": is_current_month, "days_elapsed": days_elapsed,
+        "is_current_month": is_current_month, "is_last_completed_month": is_last_completed_month,
+        "month_is_closed": days_elapsed == n_days if days_elapsed is not None else None,
+        "days_elapsed": days_elapsed,
         "prev_month": prev_month_key, "prev_month_errors": prev_errors,
         "mom_compare": mom_compare, "projection": projection,
     }
