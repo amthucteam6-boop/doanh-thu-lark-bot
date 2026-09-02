@@ -187,6 +187,10 @@
   .stat-tile .st-projection { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
   .stat-tile .st-projection .lbl { font-size: 12px; color: var(--text-muted); }
   .stat-tile .st-projection .val { font-size: 18px; font-weight: 800; }
+  .stat-tile .st-target { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(124,111,242,.12); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .stat-tile .st-target .lbl { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .stat-tile .st-target .val { font-size: 18px; font-weight: 800; color: var(--accent); }
+  .month-extra-title { font-size: 14px; font-weight: 700; margin-top: 4px; }
   .month-extra-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 16px; }
 </style>
 </head>
@@ -235,7 +239,8 @@
       </div>
     </div>
     <div class="month-note" id="month-note"></div>
-    <div class="month-extra" id="month-extra" style="margin-top:14px;"></div>
+    <div class="month-extra-title" id="month-extra-title"></div>
+    <div class="month-extra" id="month-extra" style="margin-top:10px;"></div>
     <div class="month-extra-hint" id="month-extra-hint"></div>
     <div style="overflow-x:auto;">
       <table class="data">
@@ -596,16 +601,57 @@ function monthName(yyyyMm) {
   return `Tháng ${parseInt(m,10)}/${y}`;
 }
 
+function nextMonthKey(yyyyMm) {
+  const [y, m] = yyyyMm.split('-').map(Number);
+  return m === 12 ? `${y+1}-01` : `${y}-${String(m+1).padStart(2,'0')}`;
+}
+
+function fmtDateShort(iso) {
+  const [, m, d] = iso.split('-');
+  return `${parseInt(d,10)}/${parseInt(m,10)}`;
+}
+
+// De xuat muc tieu thang sau = du kien cuoi thang nay, nhan voi toc do tang
+// truong cung ky (mom%) nhung GHIM lai trong khoang [-3%, +20%]: khong de
+// xuat 1 muc tieu tiep tuc giam sau hon -3% (muc tieu nen huong toi giu on
+// dinh/phuc hoi, khong chi ngoai suy da giam), va khong day ky vong tang
+// truong qua cao (>20%/thang) chi vi 1 thang tang dot bien.
+function proposeTarget(projection, momPct) {
+  if (projection === null || projection === undefined || momPct === null || momPct === undefined) return null;
+  const growth = Math.max(-0.03, Math.min(0.20, momPct / 100));
+  return projection * (1 + growth);
+}
+
+function assessCaption(mom, days, unitKey) {
+  const trend = classifyTrend(mom.pct);
+  let text = `${trend.text} <b>${pctLabel(mom.pct)}</b> so với cùng kỳ tháng trước.`;
+  const withVal = days
+    .filter(d => d.date !== todayIso() && d[unitKey] !== null && d[unitKey] !== undefined)
+    .map(d => ({ date: d.date, v: d[unitKey] }));
+  if (withVal.length >= 3) {
+    const best = withVal.reduce((a,b) => b.v > a.v ? b : a);
+    const worst = withVal.reduce((a,b) => b.v < a.v ? b : a);
+    if (best.date !== worst.date) {
+      text += ` Cao nhất ${fmtDateShort(best.date)} (${fmtMoney(best.v)}), thấp nhất ${fmtDateShort(worst.date)} (${fmtMoney(worst.v)}).`;
+    }
+  }
+  return text;
+}
+
 function renderMonthExtra(data, cols) {
+  const title = document.getElementById('month-extra-title');
   const wrap = document.getElementById('month-extra');
   const hint = document.getElementById('month-extra-hint');
   if (!data.is_current_month || !data.mom_compare || !data.projection) {
+    title.textContent = '';
     wrap.innerHTML = '';
     hint.textContent = '';
     return;
   }
   const thisMonthLabel = monthName(data.month);
   const prevMonthLabel = monthName(data.prev_month);
+  const nextMonthLabel = monthName(nextMonthKey(data.month));
+  title.textContent = `📈 Đánh giá ${thisMonthLabel} & Đề xuất mục tiêu ${nextMonthLabel}`;
 
   wrap.innerHTML = cols.map(c => {
     const mom = data.mom_compare[c.key];
@@ -613,19 +659,21 @@ function renderMonthExtra(data, cols) {
     if (!mom) return '';
     const cls = trendClass(mom.pct);
     const arrow = mom.pct === null ? '⚪' : trendArrow(mom.pct);
+    const target = proposeTarget(proj, mom.pct);
     return `
     <div class="stat-tile trend-${cls}">
       <div class="st-title">${MONTH_UNIT_LABEL[c.key] || c.key} — so với cùng kỳ</div>
       <div class="st-pct ${cls}">${arrow} ${pctLabel(mom.pct)}</div>
-      <div class="st-caption">${thisMonthLabel} (${data.days_elapsed} ngày đầu) so với ${prevMonthLabel} (cùng ${data.days_elapsed} ngày đầu)</div>
+      <div class="st-caption">${assessCaption(mom, data.days, c.key)}</div>
       <div class="st-row"><span class="lbl">${thisMonthLabel}, ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.current_partial)}</span></div>
       <div class="st-row"><span class="lbl">${prevMonthLabel}, cùng ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.prev_partial)}</span></div>
       <div class="st-row"><span class="lbl">Cả ${prevMonthLabel}</span><span class="val">${fmtMoney(mom.prev_full)}</span></div>
       <div class="st-projection"><span class="lbl">💡 Dự kiến cuối ${thisMonthLabel}</span><span class="val">${proj !== null ? fmtMoney(proj) : '—'}</span></div>
+      <div class="st-target"><span class="lbl">🎯 Đề xuất mục tiêu ${nextMonthLabel}</span><span class="val">${target !== null ? fmtMoney(target) : '—'}</span></div>
     </div>`;
   }).join('');
 
-  hint.textContent = `So sánh cùng kỳ: ${data.days_elapsed} ngày đầu ${thisMonthLabel} so với ${data.days_elapsed} ngày đầu ${prevMonthLabel}. Dự kiến cuối tháng = ước lượng đơn giản theo nhịp doanh thu trung bình/ngày từ đầu tháng tới nay nhân với ${data.days_in_month} ngày — chỉ mang tính tham khảo, chưa tính mùa vụ/ngày lễ.`;
+  hint.textContent = `So sánh cùng kỳ: ${data.days_elapsed} ngày đầu ${thisMonthLabel} so với ${data.days_elapsed} ngày đầu ${prevMonthLabel}. Dự kiến cuối tháng = ước lượng theo nhịp doanh thu trung bình/ngày từ đầu tháng tới nay nhân với ${data.days_in_month} ngày. Đề xuất mục tiêu ${nextMonthLabel} = dự kiến cuối ${thisMonthLabel} × tốc độ tăng trưởng cùng kỳ (ghim trong khoảng -3% đến +20%/tháng để không đề xuất một mục tiêu tiếp tục giảm sâu hoặc tăng phi thực tế). Tất cả chỉ mang tính tham khảo để Ánh cân nhắc thêm yếu tố mùa vụ, kế hoạch marketing, ngày lễ — không phải cam kết.`;
 }
 
 const ONLINE_BRAND_LABELS = { bpp: "Beard Papa's (BPP) — 11 cơ sở", waji: 'Waji', '39beef': '39Beef' };
