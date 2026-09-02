@@ -642,16 +642,20 @@ function renderMonthExtra(data, cols) {
   const title = document.getElementById('month-extra-title');
   const wrap = document.getElementById('month-extra');
   const hint = document.getElementById('month-extra-hint');
-  if (!data.is_current_month || !data.mom_compare || !data.projection) {
+  const showEval = data.is_current_month || data.is_last_completed_month;
+  if (!showEval || !data.mom_compare || !data.projection) {
     title.textContent = '';
     wrap.innerHTML = '';
     hint.textContent = '';
     return;
   }
+  const closed = !!data.month_is_closed;
   const thisMonthLabel = monthName(data.month);
   const prevMonthLabel = monthName(data.prev_month);
   const nextMonthLabel = monthName(nextMonthKey(data.month));
-  title.textContent = `📈 Đánh giá ${thisMonthLabel} & Đề xuất mục tiêu ${nextMonthLabel}`;
+  title.textContent = closed
+    ? `📈 Đánh giá ${thisMonthLabel} (đã kết thúc) & Đề xuất mục tiêu ${nextMonthLabel}`
+    : `📈 Đánh giá ${thisMonthLabel} & Đề xuất mục tiêu ${nextMonthLabel}`;
 
   wrap.innerHTML = cols.map(c => {
     const mom = data.mom_compare[c.key];
@@ -660,20 +664,28 @@ function renderMonthExtra(data, cols) {
     const cls = trendClass(mom.pct);
     const arrow = mom.pct === null ? '⚪' : trendArrow(mom.pct);
     const target = proposeTarget(proj, mom.pct);
+
+    const rowsHtml = closed
+      ? `<div class="st-row"><span class="lbl">Cả ${thisMonthLabel}</span><span class="val">${fmtMoney(mom.current_partial)}</span></div>
+         <div class="st-row"><span class="lbl">Cả ${prevMonthLabel}</span><span class="val">${fmtMoney(mom.prev_full)}</span></div>`
+      : `<div class="st-row"><span class="lbl">${thisMonthLabel}, ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.current_partial)}</span></div>
+         <div class="st-row"><span class="lbl">${prevMonthLabel}, cùng ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.prev_partial)}</span></div>
+         <div class="st-row"><span class="lbl">Cả ${prevMonthLabel}</span><span class="val">${fmtMoney(mom.prev_full)}</span></div>
+         <div class="st-projection"><span class="lbl">💡 Dự kiến cuối ${thisMonthLabel}</span><span class="val">${proj !== null ? fmtMoney(proj) : '—'}</span></div>`;
+
     return `
     <div class="stat-tile trend-${cls}">
       <div class="st-title">${MONTH_UNIT_LABEL[c.key] || c.key} — so với cùng kỳ</div>
       <div class="st-pct ${cls}">${arrow} ${pctLabel(mom.pct)}</div>
       <div class="st-caption">${assessCaption(mom, data.days, c.key)}</div>
-      <div class="st-row"><span class="lbl">${thisMonthLabel}, ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.current_partial)}</span></div>
-      <div class="st-row"><span class="lbl">${prevMonthLabel}, cùng ${data.days_elapsed} ngày đầu</span><span class="val">${fmtMoney(mom.prev_partial)}</span></div>
-      <div class="st-row"><span class="lbl">Cả ${prevMonthLabel}</span><span class="val">${fmtMoney(mom.prev_full)}</span></div>
-      <div class="st-projection"><span class="lbl">💡 Dự kiến cuối ${thisMonthLabel}</span><span class="val">${proj !== null ? fmtMoney(proj) : '—'}</span></div>
+      ${rowsHtml}
       <div class="st-target"><span class="lbl">🎯 Đề xuất mục tiêu ${nextMonthLabel}</span><span class="val">${target !== null ? fmtMoney(target) : '—'}</span></div>
     </div>`;
   }).join('');
 
-  hint.textContent = `So sánh cùng kỳ: ${data.days_elapsed} ngày đầu ${thisMonthLabel} so với ${data.days_elapsed} ngày đầu ${prevMonthLabel}. Dự kiến cuối tháng = ước lượng theo nhịp doanh thu trung bình/ngày từ đầu tháng tới nay nhân với ${data.days_in_month} ngày. Đề xuất mục tiêu ${nextMonthLabel} = dự kiến cuối ${thisMonthLabel} × tốc độ tăng trưởng cùng kỳ (ghim trong khoảng -3% đến +20%/tháng để không đề xuất một mục tiêu tiếp tục giảm sâu hoặc tăng phi thực tế). Tất cả chỉ mang tính tham khảo để Ánh cân nhắc thêm yếu tố mùa vụ, kế hoạch marketing, ngày lễ — không phải cam kết.`;
+  hint.textContent = closed
+    ? `${thisMonthLabel} đã kết thúc — số liệu là kết quả cuối cùng, không phải ước lượng. Đề xuất mục tiêu ${nextMonthLabel} = tổng ${thisMonthLabel} × tốc độ tăng trưởng vừa đạt được so với ${prevMonthLabel} (ghim trong khoảng -3% đến +20% để không đề xuất một mục tiêu tiếp tục giảm sâu hoặc tăng phi thực tế). Chỉ mang tính tham khảo để Ánh cân nhắc thêm yếu tố mùa vụ, kế hoạch marketing, ngày lễ — không phải cam kết.`
+    : `So sánh cùng kỳ: ${data.days_elapsed} ngày đầu ${thisMonthLabel} so với ${data.days_elapsed} ngày đầu ${prevMonthLabel}. Dự kiến cuối tháng = ước lượng theo nhịp doanh thu trung bình/ngày từ đầu tháng tới nay nhân với ${data.days_in_month} ngày. Đề xuất mục tiêu ${nextMonthLabel} = dự kiến cuối ${thisMonthLabel} × tốc độ tăng trưởng cùng kỳ (ghim trong khoảng -3% đến +20%/tháng để không đề xuất một mục tiêu tiếp tục giảm sâu hoặc tăng phi thực tế). Tất cả chỉ mang tính tham khảo để Ánh cân nhắc thêm yếu tố mùa vụ, kế hoạch marketing, ngày lễ — không phải cam kết.`;
 }
 
 const ONLINE_BRAND_LABELS = { bpp: "Beard Papa's (BPP) — 11 cơ sở", waji: 'Waji', '39beef': '39Beef' };
