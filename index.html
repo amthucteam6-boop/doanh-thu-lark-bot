@@ -225,9 +225,14 @@
   <div class="section">
     <div class="section-head">
       <h3 class="section-title">🛵 Doanh thu kênh Merchant/Online (Grab, Foody, Shopee, Befood...)</h3>
-      <button class="btn primary" id="online-revenue-btn">🔄 Tải doanh thu online</button>
     </div>
-    <div class="month-note" id="online-revenue-note">Bấm nút để tra cứu doanh thu kênh online ngày đang chọn ở trên (có thể mất chút thời gian vì quét nhiều chi nhánh).</div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:8px;">
+      <button class="btn primary" id="online-revenue-btn">🔄 Theo ngày đang chọn ở trên</button>
+      <span style="color:var(--text-muted); font-size:12px;">hoặc</span>
+      <input type="month" id="online-month-picker">
+      <button class="btn primary" id="online-month-btn">📅 Xem cả tháng</button>
+    </div>
+    <div class="month-note" id="online-revenue-note">Bấm nút để tra cứu doanh thu kênh online (có thể mất chút thời gian vì quét nhiều chi nhánh).</div>
     <div id="online-revenue-body"></div>
   </div>
 
@@ -740,7 +745,32 @@ async function loadOnlineRevenue() {
   }
 }
 
+async function loadOnlineMonth() {
+  const monthVal = document.getElementById('online-month-picker').value;
+  const btn = document.getElementById('online-month-btn');
+  const note = document.getElementById('online-revenue-note');
+  const body = document.getElementById('online-revenue-body');
+  btn.disabled = true;
+  note.textContent = `⏳ Đang quét doanh thu online cả ${monthName(monthVal)} (BPP 11 cơ sở + Waji + 39Beef)... lần đầu xem 1 tháng có thể mất khá lâu, các lần sau sẽ nhanh hơn nhiều nhờ cache.`;
+  try {
+    const data = await api(`/api/dashboard?action=online_month&month=${monthVal}`);
+    const order = state.viewBrand === null ? ['bpp', 'waji', '39beef'] : [state.viewBrand];
+    body.innerHTML = order.map(k => data.brands[k] ? onlineBrandTableHtml(k, data.brands[k]) : '').join('');
+    if (Object.keys(data.errors || {}).length) {
+      note.textContent = 'Lỗi: ' + Object.entries(data.errors).map(([b,e]) => `${b}: ${e}`).join(' | ');
+    } else {
+      note.textContent = `Doanh thu kênh online cả ${monthName(monthVal)}.`;
+    }
+  } catch (err) {
+    note.textContent = '';
+    showToast(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 document.getElementById('online-revenue-btn').addEventListener('click', loadOnlineRevenue);
+document.getElementById('online-month-btn').addEventListener('click', loadOnlineMonth);
 
 function renderTabs() {
   const el = document.getElementById('brand-tabs');
@@ -761,7 +791,7 @@ function switchTab(viewBrand) {
   render();
   loadMonth();
   document.getElementById('online-revenue-body').innerHTML = '';
-  document.getElementById('online-revenue-note').textContent = 'Bấm nút để tra cứu doanh thu kênh online ngày đang chọn ở trên (có thể mất chút thời gian vì quét nhiều chi nhánh).';
+  document.getElementById('online-revenue-note').textContent = 'Bấm nút để tra cứu doanh thu kênh online (có thể mất chút thời gian vì quét nhiều chi nhánh).';
 }
 
 function tickClock() {
@@ -781,6 +811,7 @@ document.getElementById('month-picker').addEventListener('change', loadMonth);
   state.date = todayIso();
   document.getElementById('date-picker').value = state.date;
   document.getElementById('month-picker').value = state.date.slice(0,7);
+  document.getElementById('online-month-picker').value = state.date.slice(0,7);
   renderTabs();
   tickClock();
   setInterval(tickClock, 1000);
