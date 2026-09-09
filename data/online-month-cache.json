@@ -578,5 +578,312 @@
       "total_bills": 2187,
       "total_revenue": 203398871.0
     }
+  },
+  "2026-08": {
+    "39beef": {
+      "by_branch": {
+        "39 BEEF 245 TÔ HIỆU": {
+          "bills": 146,
+          "by_channel": {
+            "CAPICHI": {
+              "bills": 5,
+              "revenue": 720400.0
+            },
+            "GRAB": {
+              "bills": 78,
+              "revenue": 10758754.0
+            },
+            "SHOPEE": {
+              "bills": 63,
+              "revenue": 6438338.0
+            }
+          },
+          "revenue": 17917492.0,
+          "total_bills": 780,
+          "total_revenue": 316986624.0
+        },
+        "39 BEEF 34 VŨ PHẠM HÀM": {
+          "bills": 271,
+          "by_channel": {
+            "CAPICHI": {
+              "bills": 21,
+              "revenue": 3011209.0
+            },
+            "GRAB": {
+              "bills": 178,
+              "revenue": 28004900.0
+            },
+            "SHOPEE": {
+              "bills": 72,
+              "revenue": 7191678.0
+            }
+          },
+          "revenue": 38207787.0,
+          "total_bills": 584,
+          "total_revenue": 160366119.0
+        }
+      },
+      "total_bills": 417,
+      "total_revenue": 56125279.0
+    },
+    "bpp": {
+      "by_branch": {
+        "Beard Papa's - 177 Đội Cấn": {
+          "bills": 535,
+          "by_channel": {
+            "Befood": {
+              "bills": 9,
+              "revenue": 1069230.0
+            },
+            "Capichi": {
+              "bills": 4,
+              "revenue": 1270000.0
+            },
+            "Foody": {
+              "bills": 104,
+              "revenue": 17564001.0
+            },
+            "Grab": {
+              "bills": 418,
+              "revenue": 67168000.0
+            }
+          },
+          "revenue": 87071231.0,
+          "total_bills": 1549,
+          "total_revenue": 216730769.0
+        },
+        "Beard Papa's - 34 Vũ Phạm Hàm": {
+          "bills": 285,
+          "by_channel": {
+            "Grab": {
+              "bills": 285,
+              "revenue": 39285000.0
+            }
+          },
+          "revenue": 39285000.0,
+          "total_bills": 1394,
+          "total_revenue": 171689836.0
+        },
+        "Beard Papa's - Hàng Bông": {
+          "bills": 239,
+          "by_channel": {
+            "Befood": {
+              "bills": 2,
+              "revenue": 251910.0
+            },
+            "Capichi": {
+              "bills": 12,
+              "revenue": 3055000.0
+            },
+            "Foody": {
+              "bills": 97,
+              "revenue": 17181777.0
+            },
+            "Grab": {
+              "bills": 128,
+              "revenue": 20904000.0
+            }
+          },
+          "revenue": 41392687.0,
+          "total_bills": 2180,
+          "total_revenue": 271942490.0
+        },
+        "Beard Papa's - Hội Chợ": {
+          "bills": 0,
+          "by_channel": {},
+          "revenue": 0.0,
+          "total_bills": 677,
+          "total_revenue": 160379162.0
+        },
+        "Beard Papa's - Lê Đại Hành": {
+          "bills": 552,
+          "by_channel": {
+            "Befood": {
+              "bills": 10,
+              "revenue": 1369380.0
+            },
+            "Foody": {
+              "bills": 223,
+              "revenue": 32214001.0
+            },
+            "Grab": {
+              "bills": 310,
+              "revenue": 52226000.0
+            },
+            "Xanh Ngon": {
+              "bills": 9,
+              "revenue": 1035200.0
+            }
+          },
+          "revenue": 86844581.0,
+          "total_bills": 2570,
+          "total_revenue": 351052415.0
+        },
+        "Beard Papa's - Lương Định Của": {
+          "bills": 31,
+          "by_channel": {
+            "Befood": {
+              "bills": 1,
+              "revenue": 68000.0
+            },
+            "Foody": {
+              "bills": 16,
+              "revenue": 2328627.0
+            },
+            "Grab": {
+              "bills": 14,
+              "revenue": 1652000.0
+            }
+          },
+          "revenue": 4048627.0,
+          "total_bills": 923,
+          "total_revenue": 92707427.0
+        },
+        "Beard Papa's - Nguyễn Du": {
+          "bills": 156,
+          "by_channel": {
+            "Capichi": {
+              "bills": 3,
+              "revenue": 364000.0
+            },
+            "Foody": {
+              "bills": 47,
+              "revenue": 7556227.0
+            },
+            "Grab": {
+              "bills": 101,
+              "revenue": 15363000.0
+            },
+            "Xanh Ngon": {
+              "bills": 5,
+              "revenue": 489400.0
+            }
+          },
+          "revenue": 23772627.0,
+          "total_bills": 1771,
+          "total_revenue": 218548202.0
+        },
+        "Beard Papa's - Nguyễn Lương Bằng": {
+          "bills": 53,
+          "by_channel": {
+            "Foody": {
+              "bills": 48,
+              "revenue": 6459651.0
+            },
+            "Grab": {
+              "bills": 5,
+              "revenue": 742500.0
+            }
+          },
+          "revenue": 7202151.0,
+          "total_bills": 1409,
+          "total_revenue": 154986151.0
+        },
+        "Beard Papa's - Nguyễn Thị Định": {
+          "bills": 568,
+          "by_channel": {
+            "Befood": {
+              "bills": 23,
+              "revenue": 3314600.0
+            },
+            "Capichi": {
+              "bills": 13,
+              "revenue": 2809000.0
+            },
+            "Foody": {
+              "bills": 219,
+              "revenue": 32659398.0
+            },
+            "Grab": {
+              "bills": 298,
+              "revenue": 44455006.0
+            },
+            "Xanh Ngon": {
+              "bills": 15,
+              "revenue": 2040000.0
+            }
+          },
+          "revenue": 85278004.0,
+          "total_bills": 1749,
+          "total_revenue": 252408132.0
+        },
+        "Beard Papa's - Phan Đình Phùng": {
+          "bills": 157,
+          "by_channel": {
+            "Befood": {
+              "bills": 4,
+              "revenue": 506340.0
+            },
+            "Foody": {
+              "bills": 88,
+              "revenue": 11948527.0
+            },
+            "Grab": {
+              "bills": 65,
+              "revenue": 10335000.0
+            }
+          },
+          "revenue": 22789867.0,
+          "total_bills": 875,
+          "total_revenue": 99073867.0
+        },
+        "Beard Papa's - Thái Hà": {
+          "bills": 516,
+          "by_channel": {
+            "Befood": {
+              "bills": 2,
+              "revenue": 334080.0
+            },
+            "Capichi": {
+              "bills": 11,
+              "revenue": 1836000.0
+            },
+            "Foody": {
+              "bills": 69,
+              "revenue": 12120146.0
+            },
+            "Grab": {
+              "bills": 434,
+              "revenue": 64607705.0
+            }
+          },
+          "revenue": 78897931.0,
+          "total_bills": 2240,
+          "total_revenue": 300052791.0
+        }
+      },
+      "total_bills": 3092,
+      "total_revenue": 476582706.0
+    },
+    "waji": {
+      "by_branch": {
+        "WAJI 155 HOÀNG NGÂN": {
+          "bills": 1988,
+          "by_channel": {
+            "Capichi": {
+              "bills": 3,
+              "revenue": 451004.0
+            },
+            "Grabfood": {
+              "bills": 1904,
+              "revenue": 250223158.0
+            },
+            "Shopeefood": {
+              "bills": 78,
+              "revenue": 9002064.0
+            },
+            "XANH NGON": {
+              "bills": 3,
+              "revenue": 299000.0
+            }
+          },
+          "revenue": 259975226.0,
+          "total_bills": 2455,
+          "total_revenue": 346196285.0
+        }
+      },
+      "total_bills": 1988,
+      "total_revenue": 259975226.0
+    }
   }
 }
