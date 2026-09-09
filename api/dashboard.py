@@ -10,7 +10,8 @@ Endpoint duy nhat /api/dashboard, dieu huong theo query param "action":
   GET  ?action=state&date=YYYY-MM-DD  -> doanh thu 3 khung gio + so sanh hom qua
   GET  ?action=month&month=YYYY-MM    -> tong hop theo ngay ca thang + so sanh
                                           thang truoc + du phong cuoi thang
-  GET  ?action=online&date=YYYY-MM-DD -> doanh thu kenh Merchant/Online
+  GET  ?action=online&date=YYYY-MM-DD -> doanh thu kenh Merchant/Online (1 ngay)
+  GET  ?action=online_month&month=YYYY-MM -> doanh thu kenh Merchant/Online (ca thang)
 """
 
 import base64
@@ -461,12 +462,18 @@ def action_month(year_month):
     }
 
 
-# --- action=online ---
+# --- action=online / action=online_month ---
 
-def action_online(date_iso):
-    raw = fetch_real_brands(date_iso, date_iso)
-    result = {}
-    errors = {}
+def _summarize_online_by_brand(raw):
+    """raw: {cukcuk_key: (invoices|None, err|None)} tu fetch_real_brands.
+    LUU Y ve ten field: "total_revenue"/"total_bills" O CAP BRAND (ket qua
+    tra ve) that ra la TONG PHAN ONLINE (khong phai tong online+tai quan) -
+    ten hoi gay nham lan (ke thua tu code cu) nhung index.html da doc dung
+    theo nghia nay cho dong "Online: ..." nen GIU NGUYEN de khong pha frontend
+    dang chay - xem chi tiet trong memory du an muc "Bug total_revenue online".
+    Muon tong THAT SU (online+tai quan) thi tu cong tung
+    by_branch[...]["total_revenue"] (field nay o cap CHI NHANH moi dung nghia)."""
+    result, errors = {}, {}
     for cukcuk_key, (invs, err) in raw.items():
         if err:
             errors[cukcuk_key] = err
@@ -488,7 +495,72 @@ def action_online(date_iso):
         total_revenue = sum(v["revenue"] for v in by_branch.values())
         total_bills = sum(v["bills"] for v in by_branch.values())
         result[cukcuk_key] = {"by_branch": by_branch, "total_revenue": total_revenue, "total_bills": total_bills}
+    return result, errors
+
+
+def action_online(date_iso):
+    raw = fetch_real_brands(date_iso, date_iso)
+    result, errors = _summarize_online_by_brand(raw)
     return {"date": date_iso, "brands": result, "errors": errors}
+
+
+# Doanh thu online CA THANG - nang hon nhieu so action_online (1 ngay) vi
+# phai quet ca thang cho BPP (11 chi nhanh, 500-600 bill/ngay o chi nhanh
+# ban chay) - giong het ly do action_month can cache theo ngay. O day don
+# gian hoa: cache theo CA THANG (khong phai theo ngay) vi tinh nang nay chi
+# dung de xem lai bao cao, khong can cap nhat tung ngay - thang DA DONG
+# (khac thang dang chay) thi cache vinh vien, thang dang chay luon fetch song.
+ONLINE_MONTH_CACHE_PATH_IN_REPO = "data/online-month-cache.json"
+
+
+def _load_online_month_cache():
+    current = github_api("GET", f"/repos/{GITHUB_REPO}/contents/{ONLINE_MONTH_CACHE_PATH_IN_REPO}")
+    if current is None:
+        return {}, None
+    content = base64.b64decode(current["content"]).decode("utf-8")
+    cache = json.loads(content) if content.strip() else {}
+    return cache, current["sha"]
+
+
+def _save_online_month_cache(cache, sha):
+    content_b64 = base64.b64encode(
+        json.dumps(cache, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    ).decode("ascii")
+    payload = {"message": "Cap nhat cache doanh thu online theo thang", "content": content_b64}
+    if sha:
+        payload["sha"] = sha
+    github_api("PUT", f"/repos/{GITHUB_REPO}/contents/{ONLINE_MONTH_CACHE_PATH_IN_REPO}", payload)
+
+
+def action_online_month(year_month):
+    year, month = int(year_month[:4]), int(year_month[5:7])
+    n_days = calendar.monthrange(year, month)[1]
+    today = datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")
+    month_end = f"{year_month}-{n_days:02d}"
+    is_closed = month_end < today
+    cache_usable = bool(GITHUB_TOKEN)
+
+    if is_closed and cache_usable:
+        try:
+            cache, _ = _load_online_month_cache()
+            if year_month in cache:
+                return {"month": year_month, "brands": cache[year_month], "errors": {}}
+        except RuntimeError:
+            cache_usable = False
+
+    date_to = min(month_end, today)
+    raw = fetch_real_brands(f"{year_month}-01", date_to)
+    result, errors = _summarize_online_by_brand(raw)
+
+    if is_closed and cache_usable and not errors:
+        try:
+            cache, sha = _load_online_month_cache()
+            cache[year_month] = result
+            _save_online_month_cache(cache, sha)
+        except RuntimeError:
+            pass
+
+    return {"month": year_month, "brands": result, "errors": errors}
 
 
 # --- luu tru ben vung qua GitHub Contents API (dung cho cache thang) ---
@@ -527,6 +599,9 @@ class handler(BaseHTTPRequestHandler):
             elif action == "online":
                 date_iso = (params.get("date") or [datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m-%d")])[0]
                 self._respond(200, action_online(date_iso))
+            elif action == "online_month":
+                year_month = (params.get("month") or [datetime.now(ZoneInfo("Asia/Saigon")).strftime("%Y-%m")])[0]
+                self._respond(200, action_online_month(year_month))
             else:
                 self._respond(400, {"error": f"action không hợp lệ: {action!r}"})
         except Exception as exc:  # noqa: BLE001
