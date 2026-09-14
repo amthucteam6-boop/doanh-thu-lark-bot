@@ -55,6 +55,9 @@
   }
   .clock { font-size: 12.5px; color: var(--text-muted); min-width: 70px; }
   .status-line { font-size: 12.5px; color: var(--accent); min-height: 16px; }
+  .auto-refresh-note { font-size: 11.5px; color: var(--text-muted); margin: -4px 0 10px; display: flex; align-items: center; gap: 6px; }
+  .auto-refresh-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: 0 0 auto; animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 
   .btn { cursor: pointer; font-family: inherit; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); padding: 7px 13px; border-radius: 999px; font-size: 12.5px; transition: transform .1s; }
   .btn:hover { transform: translateY(-1px); }
@@ -212,6 +215,7 @@
   <div class="tabs" id="brand-tabs"></div>
 
   <div class="status-line" id="status-line"></div>
+  <div class="auto-refresh-note" id="auto-refresh-note"></div>
 
   <div class="hero" id="hero"></div>
 
@@ -522,27 +526,74 @@ function renderInsights() {
   }).join('');
 }
 
-async function loadState() {
+async function loadState(opts) {
+  const silent = opts && opts.silent;
   const viewBrand = state.viewBrand;
-  setStatus('⏳ Đang tải doanh thu từ CukCuk...');
-  document.getElementById('date-picker').disabled = true;
-  document.getElementById('refresh-btn').disabled = true;
+  if (!silent) {
+    setStatus('⏳ Đang tải doanh thu từ CukCuk...');
+    document.getElementById('date-picker').disabled = true;
+    document.getElementById('refresh-btn').disabled = true;
+  }
   try {
     const data = await api(`/api/dashboard?action=state&date=${state.date}`);
     state = data;
     state.viewBrand = viewBrand;
     render();
     if (data.errors && Object.keys(data.errors).length) {
-      showToast('Lỗi: ' + Object.entries(data.errors).map(([b,e]) => `${b}: ${e}`).join(' | '), true);
+      // Lam moi tu dong chay nen - khong lam phien bang toast moi lan neu loi,
+      // chi log ra console; loi that su Anh se thay khi tu bam "Lam moi".
+      if (silent) console.warn('Lỗi khi tự động cập nhật:', data.errors);
+      else showToast('Lỗi: ' + Object.entries(data.errors).map(([b,e]) => `${b}: ${e}`).join(' | '), true);
     }
+    markUpdatedNow();
   } catch (err) {
-    showToast(err.message, true);
+    if (silent) console.warn('Lỗi khi tự động cập nhật:', err.message);
+    else showToast(err.message, true);
   } finally {
-    setStatus('');
-    document.getElementById('date-picker').disabled = false;
-    document.getElementById('refresh-btn').disabled = false;
+    if (!silent) {
+      setStatus('');
+      document.getElementById('date-picker').disabled = false;
+      document.getElementById('refresh-btn').disabled = false;
+    }
   }
 }
+
+// --- Tu dong cap nhat doanh thu HOM NAY, khong can bam "Lam moi" ---
+const AUTO_REFRESH_MS = 60000; // 60 giay/lan - du "gan nhu tuc thi" ma khong lam qua tai CukCuk
+let autoRefreshTimer = null;
+
+function markUpdatedNow() {
+  const note = document.getElementById('auto-refresh-note');
+  if (!note) return;
+  const hhmmss = new Date().toLocaleTimeString('vi-VN');
+  if (state.date === todayIso()) {
+    note.innerHTML = `<span class="auto-refresh-dot"></span> Tự động cập nhật mỗi phút · Cập nhật lúc ${hhmmss}`;
+  } else {
+    note.textContent = `Đang xem ngày ${state.date.split('-').reverse().join('/')} (không tự động cập nhật vì không phải hôm nay)`;
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshTimer = setInterval(() => {
+    if (document.hidden) return; // tab dang an - khong fetch de do tai
+    if (state.date !== todayIso()) return; // chi tu dong lam moi cho HOM NAY
+    loadState({ silent: true });
+  }, AUTO_REFRESH_MS);
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = null;
+}
+
+// Khi mo lai tab (vd Anh chuyen qua app khac roi quay lai) - lam moi ngay,
+// vi lo trinh duyet co the da tam dung setInterval khi tab bi an.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.date === todayIso()) {
+    loadState({ silent: true });
+  }
+});
 
 const MONTH_COLUMNS_ALL = [
   { key: 'bpp', label: 'BPP' },
@@ -817,6 +868,7 @@ document.getElementById('month-picker').addEventListener('change', loadMonth);
   setInterval(tickClock, 1000);
   await loadState();
   loadMonth();
+  startAutoRefresh();
 })();
 </script>
 </body>
