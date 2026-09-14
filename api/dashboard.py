@@ -250,13 +250,66 @@ def _delta(today_val, yday_val):
     return {"today": today_val, "yesterday": yday_val, "delta": delta, "pct": pct}
 
 
+# Cache theo NGAY cho phan slot Trua/Chieu/Toi (dung rieng cho action=state,
+# khac voi data/month-cache.json chi luu tong tien/ngay khong co breakdown
+# slot). Y tuong: "hom qua" (so voi ngay dang xem) la du lieu DA DONG, khong
+# bao gio doi nua - moi lan action_state goi lai deu fetch song CA "hom qua"
+# LAN "hom nay" tu CukCuk la lang phi (BPP 11 chi nhanh khien 1 lan quet mat
+# 5-13s). Cache lai "hom qua" 1 lan, cac lan sau CHI can fetch CukCuk cho
+# HOM NAY (1 ngay thay vi 2) - giam gan nua thoi gian cho, giup web "mo ra la
+# co so lien" ma van dam bao dung thuc te (hom nay luon fetch song 100%).
+DAY_SLOTS_CACHE_PATH_IN_REPO = "data/day-slots-cache.json"
+
+
+def _load_day_slots_cache():
+    current = github_api("GET", f"/repos/{GITHUB_REPO}/contents/{DAY_SLOTS_CACHE_PATH_IN_REPO}")
+    if current is None:
+        return {}, None
+    content = base64.b64decode(current["content"]).decode("utf-8")
+    cache = json.loads(content) if content.strip() else {}
+    return cache, current["sha"]
+
+
+def _save_day_slots_cache(cache, sha):
+    content_b64 = base64.b64encode(
+        json.dumps(cache, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    ).decode("ascii")
+    payload = {"message": "Cap nhat cache slot Trua/Chieu/Toi theo ngay", "content": content_b64}
+    if sha:
+        payload["sha"] = sha
+    github_api("PUT", f"/repos/{GITHUB_REPO}/contents/{DAY_SLOTS_CACHE_PATH_IN_REPO}", payload)
+
+
 def action_state(date_iso):
     yesterday = (datetime.strptime(date_iso, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-    # Quet 1 lan tu yesterday-00:00 toi date_iso, du cho ca 2 ngay - khong can
-    # goi CukCuk rieng cho tung ngay.
-    raw = fetch_real_brands(yesterday, date_iso)
-    today_brands, errors = build_state_for_date(raw, date_iso)
-    yday_brands, _ = build_state_for_date(raw, yesterday)
+
+    cache_usable = bool(GITHUB_TOKEN)
+    yday_brands_cached = None
+    if cache_usable:
+        try:
+            day_cache, day_cache_sha = _load_day_slots_cache()
+            yday_brands_cached = day_cache.get(yesterday)
+        except RuntimeError:
+            cache_usable = False
+
+    if yday_brands_cached is not None:
+        # Hom qua da co cache - chi can fetch CukCuk cho HOM NAY.
+        raw = fetch_real_brands(date_iso, date_iso)
+        today_brands, errors = build_state_for_date(raw, date_iso)
+        yday_brands = yday_brands_cached
+    else:
+        # Chua co cache hom qua (lan dau trong ngay, hoac cache chua bat) -
+        # quet 1 lan tu yesterday-00:00 toi date_iso, du cho ca 2 ngay.
+        raw = fetch_real_brands(yesterday, date_iso)
+        today_brands, errors = build_state_for_date(raw, date_iso)
+        yday_brands, yday_errors = build_state_for_date(raw, yesterday)
+        if cache_usable and not yday_errors:
+            try:
+                day_cache, day_cache_sha = _load_day_slots_cache()
+                day_cache[yesterday] = yday_brands
+                _save_day_slots_cache(day_cache, day_cache_sha)
+            except RuntimeError:
+                pass  # loi ghi cache khong duoc lam hong response chinh
 
     compare = {u: {} for u in list(DISPLAY_UNITS) + ["_total"]}
     for slot_key in SLOT_ORDER:
