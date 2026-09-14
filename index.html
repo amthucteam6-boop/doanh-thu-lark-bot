@@ -561,6 +561,7 @@ async function loadState(opts) {
       else showToast('Lỗi: ' + Object.entries(data.errors).map(([b,e]) => `${b}: ${e}`).join(' | '), true);
     }
     markUpdatedNow();
+    saveStateToCache();
   } catch (err) {
     if (silent) console.warn('Lỗi khi tự động cập nhật:', err.message);
     else showToast(err.message, true);
@@ -573,7 +574,38 @@ async function loadState(opts) {
   }
 }
 
-// --- Tu dong cap nhat doanh thu HOM NAY, khong can bam "Lam moi" ---
+// --- Ve ngay so lieu cua lan xem gan nhat (localStorage) trong luc cho ket
+// qua that tu CukCuk - "mo web ra la co so ngay", khong phai nhin man hinh
+// trong/dang tai. Chi dung cho DUNG 1 ngay (key theo date) - mo ngay khac se
+// khong co cache khop nen roi ve trang thai "dang tai" binh thuong. Luon
+// van goi loadState() that ngay sau do de dam bao so hien len la so THAT SU
+// hien tai, cache chi de "lap cho" trong vai giay dau, khong thay the fetch.
+function cacheKeyFor(date) { return `revenue_cache_${date}`; }
+
+function paintFromCacheIfAny(date) {
+  try {
+    const raw = localStorage.getItem(cacheKeyFor(date));
+    if (!raw) return false;
+    const cached = JSON.parse(raw);
+    if (!cached || !cached.brands) return false;
+    const viewBrand = state.viewBrand;
+    state = cached;
+    state.viewBrand = viewBrand;
+    render();
+    setStatus('⏳ Số liệu bên dưới là lần xem gần nhất — đang tải bản mới nhất...');
+    return true;
+  } catch (e) {
+    return false; // vd Safari private mode chan localStorage - bo qua, khong sao
+  }
+}
+
+function saveStateToCache() {
+  try {
+    localStorage.setItem(cacheKeyFor(state.date), JSON.stringify(state));
+  } catch (e) { /* het dung luong/bi chan - khong anh huong chuc nang chinh */ }
+}
+
+// --- Tu dong cap nhat doanh thu HOM NAY, khong can bam "Lam mới" ---
 const AUTO_REFRESH_MS = 60000; // 60 giay/lan - du "gan nhu tuc thi" ma khong lam qua tai CukCuk
 let autoRefreshTimer = null;
 
@@ -879,6 +911,7 @@ document.getElementById('month-picker').addEventListener('change', loadMonth);
   document.getElementById('month-picker').value = state.date.slice(0,7);
   document.getElementById('online-month-picker').value = state.date.slice(0,7);
   renderTabs();
+  paintFromCacheIfAny(state.date);
   tickClock();
   setInterval(tickClock, 1000);
   await loadState();
